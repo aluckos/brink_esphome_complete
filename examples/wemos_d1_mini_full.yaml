@@ -28,48 +28,81 @@ sensor:
   - platform: brink_ventilation
     type: T_SUPPLY_IN
     name: "Temp Czerpnia (T1)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
   - platform: brink_ventilation
     type: T_SUPPLY_OUT
     name: "Temp Nawiew (T2)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
   - platform: brink_ventilation
     type: T_EXHAUST_IN
     name: "Temp Wywiew (T3)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
   - platform: brink_ventilation
     type: T_EXHAUST_OUT
     name: "Temp Wyrzutnia (T4)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
 
   - platform: brink_ventilation
     type: CURRENT_FLOW
-    name: "Przepływ (TSP 52/53)"
+    name: "Przepływ (TSP 52-53)"
+    unit_of_measurement: "m³/h"
+    accuracy_decimals: 0
 
   - platform: brink_ventilation
     type: BYPASS_STATUS
-    name: "Bypass status (0/1/2)"
+    name: "Bypass status (0-1-2)"
+    accuracy_decimals: 0
   - platform: brink_ventilation
     type: CPID
     name: "Ciśnienie nawiewu (CPID)"
+    unit_of_measurement: "Pa"
+    accuracy_decimals: 0
   - platform: brink_ventilation
     type: CPOD
     name: "Ciśnienie wywiewu (CPOD)"
+    unit_of_measurement: "Pa"
+    accuracy_decimals: 0
 
   - platform: brink_ventilation
     type: U1
     name: "U1 (step 1)"
+    unit_of_measurement: "m³/h"
+    accuracy_decimals: 0
   - platform: brink_ventilation
     type: U2
     name: "U2 (step 2)"
+    unit_of_measurement: "m³/h"
+    accuracy_decimals: 0
   - platform: brink_ventilation
     type: U3
     name: "U3 (step 3)"
+    unit_of_measurement: "m³/h"
+    accuracy_decimals: 0
   - platform: brink_ventilation
     type: U4
     name: "U4 (bypass atmo threshold)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
   - platform: brink_ventilation
     type: U5
     name: "U5 (bypass indoor threshold)"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 1
   - platform: brink_ventilation
     type: I1
     name: "I1 (imbalance)"
+    unit_of_measurement: "%"
+    accuracy_decimals: 0
 
 number:
   - platform: brink_ventilation
