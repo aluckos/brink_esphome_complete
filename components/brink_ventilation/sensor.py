@@ -32,6 +32,18 @@ TYPES = {
     "I1": "i1",
     # Bypass status
     "BYPASS_STATUS": "bypass_status",
+    # RPM wentylatorów (OT 85/86)
+    "RPM_EXHAUST": "rpm_exhaust",
+    "RPM_SUPPLY": "rpm_supply",
+    # Nowe TSP 1-bajtowe
+    "MSG_OPERATION": "msg_operation",
+    "TEMP_ATMO": "temp_atmo",
+    "TEMP_INDOORS": "temp_indoors",
+    # Nowe TSP 2-bajtowe - objętości
+    "MAX_VOL": "max_vol",
+    "MIN_VOL": "min_vol",
+    "CURRENT_INPUT_VOL": "current_input_vol",
+    "CURRENT_OUTPUT_VOL": "current_output_vol",
 }
 
 CONFIG_SCHEMA = cv.All(

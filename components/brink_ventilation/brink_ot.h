@@ -62,6 +62,28 @@ class BrinkOpenTherm : public PollingComponent {
   binary_sensor::BinarySensor *fault_indication_binary{nullptr};    // bit 0
   binary_sensor::BinarySensor *ventilation_mode_binary{nullptr};    // bit 1
 
+  // RPM wentylatorów (OT IDs 85-86)
+  sensor::Sensor *rpm_exhaust_sensor{nullptr};  // ID 85
+  sensor::Sensor *rpm_supply_sensor{nullptr};   // ID 86
+
+  // Nowe TSP 1-bajtowe
+  sensor::Sensor *msg_operation_sensor{nullptr};      // TSP 53 (C0-C12)
+  sensor::Sensor *temp_atmo_sensor{nullptr};          // TSP 55 (-100)
+  sensor::Sensor *temp_indoors_sensor{nullptr};       // TSP 56 (-100)
+  binary_sensor::BinarySensor *init_status_binary{nullptr}; // TSP 57 (0/1)
+  sensor::Sensor *voltage_param1_sensor{nullptr};     // TSP 58 (0-10V)
+  sensor::Sensor *voltage_param2_sensor{nullptr};     // TSP 59 (0-10V)
+  sensor::Sensor *frost_status_sensor{nullptr};       // TSP 68 (0-5)
+  sensor::Sensor *temp2_atmo_sensor{nullptr};         // TSP 69 (-100)
+  sensor::Sensor *temp2_indoors_sensor{nullptr};      // TSP 70 (-100)
+  sensor::Sensor *temp_postheater_sensor{nullptr};    // TSP 71
+
+  // Nowe TSP 2-bajtowe
+  sensor::Sensor *max_vol_sensor{nullptr};            // TSP 48/49
+  sensor::Sensor *min_vol_sensor{nullptr};            // TSP 50/51
+  sensor::Sensor *current_input_vol_sensor{nullptr};  // TSP 60/61
+  sensor::Sensor *current_output_vol_sensor{nullptr}; // TSP 62/63
+
   void set_pins(int in, int out) { pin_in = in; pin_out = out; }
 
   // --- settery sensorów (muszą odpowiadać nazwom z sensor.py) ---
@@ -90,6 +112,25 @@ class BrinkOpenTherm : public PollingComponent {
 
   void set_fault_indication_binary(binary_sensor::BinarySensor *s) { fault_indication_binary = s; }
   void set_ventilation_mode_binary(binary_sensor::BinarySensor *s) { ventilation_mode_binary = s; }
+
+  void set_rpm_exhaust_sensor(sensor::Sensor *s) { rpm_exhaust_sensor = s; }
+  void set_rpm_supply_sensor(sensor::Sensor *s) { rpm_supply_sensor = s; }
+
+  void set_msg_operation_sensor(sensor::Sensor *s) { msg_operation_sensor = s; }
+  void set_temp_atmo_sensor(sensor::Sensor *s) { temp_atmo_sensor = s; }
+  void set_temp_indoors_sensor(sensor::Sensor *s) { temp_indoors_sensor = s; }
+  void set_init_status_binary(binary_sensor::BinarySensor *s) { init_status_binary = s; }
+  void set_voltage_param1_sensor(sensor::Sensor *s) { voltage_param1_sensor = s; }
+  void set_voltage_param2_sensor(sensor::Sensor *s) { voltage_param2_sensor = s; }
+  void set_frost_status_sensor(sensor::Sensor *s) { frost_status_sensor = s; }
+  void set_temp2_atmo_sensor(sensor::Sensor *s) { temp2_atmo_sensor = s; }
+  void set_temp2_indoors_sensor(sensor::Sensor *s) { temp2_indoors_sensor = s; }
+  void set_temp_postheater_sensor(sensor::Sensor *s) { temp_postheater_sensor = s; }
+
+  void set_max_vol_sensor(sensor::Sensor *s) { max_vol_sensor = s; }
+  void set_min_vol_sensor(sensor::Sensor *s) { min_vol_sensor = s; }
+  void set_current_input_vol_sensor(sensor::Sensor *s) { current_input_vol_sensor = s; }
+  void set_current_output_vol_sensor(sensor::Sensor *s) { current_output_vol_sensor = s; }
 
   void set_ventilation_number(BrinkNumber *n) { n->set_parent(this); }
 
@@ -362,6 +403,137 @@ inline void BrinkOpenTherm::update() {
         }
       }
       step_ = 0;  // wracamy do początku
+      break;
+
+    // --- RPM wentylatorów ---
+    case 23:  // Exhaust RPM (OT ID 85)
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 85, 0));
+      ESP_LOGD("brink", "OT ID 85 (RPM exhaust) response: 0x%08lX", response);
+      if (response && rpm_exhaust_sensor) {
+        uint16_t rpm = (response >> 8) & 0xFFFF;
+        ESP_LOGD("brink", "Exhaust fan RPM: %d", rpm);
+        rpm_exhaust_sensor->publish_state(rpm);
+      }
+      step_++;
+      break;
+
+    case 24:  // Supply RPM (OT ID 86)
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 86, 0));
+      ESP_LOGD("brink", "OT ID 86 (RPM supply) response: 0x%08lX", response);
+      if (response && rpm_supply_sensor) {
+        uint16_t rpm = (response >> 8) & 0xFFFF;
+        ESP_LOGD("brink", "Supply fan RPM: %d", rpm);
+        rpm_supply_sensor->publish_state(rpm);
+      }
+      step_++;
+      break;
+
+    // --- TSP 53: MsgOperation ---
+    case 25:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 53 << 8));
+      ESP_LOGD("brink", "TSP 53 (MsgOperation) response: 0x%08lX", response);
+      if (response && msg_operation_sensor) {
+        uint8_t msg = (uint8_t) (response & 0xFF);
+        ESP_LOGD("brink", "Operation message: C%d", msg);
+        msg_operation_sensor->publish_state(msg);
+      }
+      step_++;
+      break;
+
+    // --- TSP 55: TempAtmo ---
+    case 26:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 55 << 8));
+      ESP_LOGD("brink", "TSP 55 (TempAtmo) response: 0x%08lX", response);
+      if (response && temp_atmo_sensor) {
+        int temp = ((int) ((uint8_t) (response & 0xFF))) - 100;
+        ESP_LOGD("brink", "Temp atmosphere: %d°C", temp);
+        temp_atmo_sensor->publish_state(temp);
+      }
+      step_++;
+      break;
+
+    // --- TSP 56: TempIndoors ---
+    case 27:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 56 << 8));
+      ESP_LOGD("brink", "TSP 56 (TempIndoors) response: 0x%08lX", response);
+      if (response && temp_indoors_sensor) {
+        int temp = ((int) ((uint8_t) (response & 0xFF))) - 100;
+        ESP_LOGD("brink", "Temp indoors: %d°C", temp);
+        temp_indoors_sensor->publish_state(temp);
+      }
+      step_++;
+      break;
+
+    // --- TSP 60/61: CurrentInputVol ---
+    case 28:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 60 << 8));
+      if (response) tsp_low_byte_ = (uint8_t) (response & 0xFF);
+      step_++;
+      break;
+
+    case 29:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 61 << 8));
+      ESP_LOGD("brink", "TSP 60/61 (CurrentInputVol) response: 0x%08lX", response);
+      if (response && current_input_vol_sensor) {
+        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
+        ESP_LOGD("brink", "Current input volume: %d m³/h", vol);
+        current_input_vol_sensor->publish_state(vol);
+      }
+      step_++;
+      break;
+
+    // --- TSP 62/63: CurrentOutputVol ---
+    case 30:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 62 << 8));
+      if (response) tsp_low_byte_ = (uint8_t) (response & 0xFF);
+      step_++;
+      break;
+
+    case 31:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 63 << 8));
+      ESP_LOGD("brink", "TSP 62/63 (CurrentOutputVol) response: 0x%08lX", response);
+      if (response && current_output_vol_sensor) {
+        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
+        ESP_LOGD("brink", "Current output volume: %d m³/h", vol);
+        current_output_vol_sensor->publish_state(vol);
+      }
+      step_++;
+      break;
+
+    // --- TSP 48/49: MaxVol ---
+    case 32:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 48 << 8));
+      if (response) tsp_low_byte_ = (uint8_t) (response & 0xFF);
+      step_++;
+      break;
+
+    case 33:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 49 << 8));
+      ESP_LOGD("brink", "TSP 48/49 (MaxVol) response: 0x%08lX", response);
+      if (response && max_vol_sensor) {
+        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
+        ESP_LOGD("brink", "Max volume: %d m³/h", vol);
+        max_vol_sensor->publish_state(vol);
+      }
+      step_++;
+      break;
+
+    // --- TSP 50/51: MinVol ---
+    case 34:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 50 << 8));
+      if (response) tsp_low_byte_ = (uint8_t) (response & 0xFF);
+      step_++;
+      break;
+
+    case 35:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 51 << 8));
+      ESP_LOGD("brink", "TSP 50/51 (MinVol) response: 0x%08lX", response);
+      if (response && min_vol_sensor) {
+        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
+        ESP_LOGD("brink", "Min volume: %d m³/h", vol);
+        min_vol_sensor->publish_state(vol);
+      }
+      step_ = 0;  // wracamy do początku po ostatnim case
       break;
 
     default:
