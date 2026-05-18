@@ -104,6 +104,67 @@ sensor:
     unit_of_measurement: "%"
     accuracy_decimals: 0
 
+  # === Nowe sensory - RPM wentylatorów ===
+  - platform: brink_ventilation
+    type: RPM_EXHAUST
+    name: "RPM wywiew"
+    unit_of_measurement: "RPM"
+    icon: "mdi:fan"
+    accuracy_decimals: 0
+  - platform: brink_ventilation
+    type: RPM_SUPPLY
+    name: "RPM nawiew"
+    unit_of_measurement: "RPM"
+    icon: "mdi:fan"
+    accuracy_decimals: 0
+
+  # === Nowe sensory - temperatury dodatkowe ===
+  - platform: brink_ventilation
+    type: TEMP_ATMO
+    name: "Temp atmosfera"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 0
+  - platform: brink_ventilation
+    type: TEMP_INDOORS
+    name: "Temp wewnętrzna"
+    unit_of_measurement: "°C"
+    device_class: temperature
+    accuracy_decimals: 0
+
+  # === Nowe sensory - objętości ===
+  - platform: brink_ventilation
+    type: MAX_VOL
+    name: "Objętość MAX"
+    unit_of_measurement: "m³/h"
+    icon: "mdi:air-filter"
+    accuracy_decimals: 0
+  - platform: brink_ventilation
+    type: MIN_VOL
+    name: "Objętość MIN"
+    unit_of_measurement: "m³/h"
+    icon: "mdi:air-filter"
+    accuracy_decimals: 0
+  - platform: brink_ventilation
+    type: CURRENT_INPUT_VOL
+    name: "Objętość wejściowa"
+    unit_of_measurement: "m³/h"
+    icon: "mdi:air-filter"
+    accuracy_decimals: 0
+  - platform: brink_ventilation
+    type: CURRENT_OUTPUT_VOL
+    name: "Objętość wyjściowa"
+    unit_of_measurement: "m³/h"
+    icon: "mdi:air-filter"
+    accuracy_decimals: 0
+
+  # === Nowe sensory - komunikaty operacyjne ===
+  - platform: brink_ventilation
+    type: MSG_OPERATION
+    name: "Kod operacji"
+    icon: "mdi:message-alert"
+    accuracy_decimals: 0
+
 number:
   - platform: brink_ventilation
     name: "Nastawa mocy (ID71)"
