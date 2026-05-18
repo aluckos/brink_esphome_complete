@@ -155,47 +155,82 @@ inline void BrinkOpenTherm::update() {
 
     case 1:  // T1 ID 80
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 80, 0));
-      if (response && t_supply_in_sensor) t_supply_in_sensor->publish_state(ot->getFloat(response));
+      ESP_LOGD("brink", "OT ID 80 response: 0x%08lX", response);
+      if (response && t_supply_in_sensor) {
+        float temp = ot->getFloat(response);
+        ESP_LOGD("brink", "T1 (supply_in): %.2f°C", temp);
+        t_supply_in_sensor->publish_state(temp);
+      } else {
+        ESP_LOGW("brink", "No response for OT ID 80 (T1)");
+      }
       step_++;
       break;
 
     case 2:  // T2 ID 81
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 81, 0));
-      if (response && t_supply_out_sensor) t_supply_out_sensor->publish_state(ot->getFloat(response));
+      ESP_LOGD("brink", "OT ID 81 response: 0x%08lX", response);
+      if (response && t_supply_out_sensor) {
+        float temp = ot->getFloat(response);
+        ESP_LOGD("brink", "T2 (supply_out): %.2f°C", temp);
+        t_supply_out_sensor->publish_state(temp);
+      } else {
+        ESP_LOGW("brink", "No response for OT ID 81 (T2)");
+      }
       step_++;
       break;
 
     case 3:  // T3 ID 82
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 82, 0));
-      if (response && t_exhaust_in_sensor) t_exhaust_in_sensor->publish_state(ot->getFloat(response));
+      ESP_LOGD("brink", "OT ID 82 response: 0x%08lX", response);
+      if (response && t_exhaust_in_sensor) {
+        float temp = ot->getFloat(response);
+        ESP_LOGD("brink", "T3 (exhaust_in): %.2f°C", temp);
+        t_exhaust_in_sensor->publish_state(temp);
+      } else {
+        ESP_LOGW("brink", "No response for OT ID 82 (T3)");
+      }
       step_++;
       break;
 
     case 4:  // T4 ID 83
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 83, 0));
-      if (response && t_exhaust_out_sensor) t_exhaust_out_sensor->publish_state(ot->getFloat(response));
+      ESP_LOGD("brink", "OT ID 83 response: 0x%08lX", response);
+      if (response && t_exhaust_out_sensor) {
+        float temp = ot->getFloat(response);
+        ESP_LOGD("brink", "T4 (exhaust_out): %.2f°C", temp);
+        t_exhaust_out_sensor->publish_state(temp);
+      } else {
+        ESP_LOGW("brink", "No response for OT ID 83 (T4)");
+      }
       step_++;
       break;
 
     // --- TSP 2-bajtowe (two-step: low, high) ---
     case 5:  // FLOW low: TSP 52 (LB)
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 52 << 8));
+      ESP_LOGD("brink", "TSP 52 response: 0x%08lX", response);
       if (response) tsp_low_byte_ = (uint8_t) (response & 0xFF);
       step_++;
       break;
 
     case 6:  // FLOW high: TSP 53 (HB)
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 53 << 8));
+      ESP_LOGD("brink", "TSP 53 response: 0x%08lX", response);
       if (response && current_flow_sensor) {
-        current_flow_sensor->publish_state(((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_);
+        uint16_t flow = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
+        ESP_LOGD("brink", "Current flow: %d m³/h", flow);
+        current_flow_sensor->publish_state(flow);
       }
       step_++;
       break;
 
     case 7:  // Filter: TSP 13
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 13 << 8));
+      ESP_LOGD("brink", "TSP 13 (filter) response: 0x%08lX", response);
       if (response && filter_status_binary) {
-        filter_status_binary->publish_state((response & 0xFF) == 1);
+        bool dirty = (response & 0xFF) == 1;
+        ESP_LOGD("brink", "Filter dirty: %s", dirty ? "YES" : "NO");
+        filter_status_binary->publish_state(dirty);
       }
       step_++;
       break;
