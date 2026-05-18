@@ -516,7 +516,7 @@ inline void BrinkOpenTherm::update() {
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 85, 0));
       ESP_LOGD("brink", "OT ID 85 (RPM exhaust) response: 0x%08lX", response);
       if (response && rpm_exhaust_sensor) {
-        uint16_t rpm = (response >> 8) & 0xFFFF;
+        uint16_t rpm = response & 0xFFFF;  // Dolne 16 bitów to wartość RPM
         ESP_LOGD("brink", "Exhaust fan RPM: %d", rpm);
         rpm_exhaust_sensor->publish_state(rpm);
       }
@@ -527,7 +527,7 @@ inline void BrinkOpenTherm::update() {
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 86, 0));
       ESP_LOGD("brink", "OT ID 86 (RPM supply) response: 0x%08lX", response);
       if (response && rpm_supply_sensor) {
-        uint16_t rpm = (response >> 8) & 0xFFFF;
+        uint16_t rpm = response & 0xFFFF;  // Dolne 16 bitów to wartość RPM
         ESP_LOGD("brink", "Supply fan RPM: %d", rpm);
         rpm_supply_sensor->publish_state(rpm);
       }
@@ -546,27 +546,19 @@ inline void BrinkOpenTherm::update() {
       step_++;
       break;
 
-    // --- TSP 55: TempAtmo ---
+    // --- TSP 55: TempAtmo (UNUSED - not in legacy, raw ADC values) ---
     case 26:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 55 << 8));
-      ESP_LOGD("brink", "TSP 55 (TempAtmo) response: 0x%08lX", response);
-      if (response && temp_atmo_sensor) {
-        int temp = ((int) ((uint8_t) (response & 0xFF))) - 100;
-        ESP_LOGD("brink", "Temp atmosphere: %d°C", temp);
-        temp_atmo_sensor->publish_state(temp);
-      }
+      // response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 55 << 8));
+      // ESP_LOGD("brink", "TSP 55 (TempAtmo) response: 0x%08lX", response);
+      // Pomijamy - nie używane w legacy Brink implementacji
       step_++;
       break;
 
-    // --- TSP 56: TempIndoors ---
+    // --- TSP 56: TempIndoors (UNUSED - not in legacy, raw ADC values) ---
     case 27:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 56 << 8));
-      ESP_LOGD("brink", "TSP 56 (TempIndoors) response: 0x%08lX", response);
-      if (response && temp_indoors_sensor) {
-        int temp = ((int) ((uint8_t) (response & 0xFF))) - 100;
-        ESP_LOGD("brink", "Temp indoors: %d°C", temp);
-        temp_indoors_sensor->publish_state(temp);
-      }
+      // response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 56 << 8));
+      // ESP_LOGD("brink", "TSP 56 (TempIndoors) response: 0x%08lX", response);
+      // Pomijamy - nie używane w legacy Brink implementacji
       step_++;
       break;
 
