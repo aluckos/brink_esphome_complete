@@ -9,6 +9,7 @@ namespace brink_ventilation {
 // Helper: Dekodowanie kodu MsgOperation (C0-C12)
 static const char* decode_msg_operation(uint8_t code) {
   switch (code) {
+    case 0x00: return "OK: No errors";  // 0x00 oznacza brak błędów
     case 0xC0: return "C0: None";
     case 0xC1: return "C1: Filter dirty";
     case 0xC2: return "C2: Max ventilation";
