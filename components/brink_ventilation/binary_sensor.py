@@ -7,6 +7,8 @@ from . import BRINK_VENTILATION_ID, BrinkOpenTherm
 
 TYPES = {
     "FILTER_STATUS": DEVICE_CLASS_PROBLEM,
+    "FAULT_INDICATION": DEVICE_CLASS_PROBLEM,    # OT ID 70 bit 0
+    "VENTILATION_MODE": None,                     # OT ID 70 bit 1 (no device class)
 }
 
 CONFIG_SCHEMA = binary_sensor.binary_sensor_schema(

@@ -58,6 +58,10 @@ class BrinkOpenTherm : public PollingComponent {
   binary_sensor::BinarySensor *filter_status_binary{nullptr};
   text_sensor::TextSensor *status_text_sensor{nullptr};
 
+  // OT ID 70 (VentStatus) - fault indication i ventilation mode
+  binary_sensor::BinarySensor *fault_indication_binary{nullptr};    // bit 0
+  binary_sensor::BinarySensor *ventilation_mode_binary{nullptr};    // bit 1
+
   void set_pins(int in, int out) { pin_in = in; pin_out = out; }
 
   // --- settery sensorów (muszą odpowiadać nazwom z sensor.py) ---
@@ -83,6 +87,9 @@ class BrinkOpenTherm : public PollingComponent {
 
   void set_filter_status_binary(binary_sensor::BinarySensor *s) { filter_status_binary = s; }
   void set_status_text_sensor(text_sensor::TextSensor *s) { status_text_sensor = s; }
+
+  void set_fault_indication_binary(binary_sensor::BinarySensor *s) { fault_indication_binary = s; }
+  void set_ventilation_mode_binary(binary_sensor::BinarySensor *s) { ventilation_mode_binary = s; }
 
   void set_ventilation_number(BrinkNumber *n) { n->set_parent(this); }
 
@@ -139,8 +146,9 @@ inline void BrinkNumber::control(float value) {
 inline void BrinkOpenTherm::update() {
   if (ot == nullptr) return;
 
-  // keep-alive (ID 0) - COMMENTED OUT TO TEST IF IT BLOCKS DATA READS
-  // ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 0, 0x0100));
+  // Nie używamy OT ID 0 (status boiler) - to jest dla kotłów, nie dla central wentylacyjnych!
+  // Ventilation status to OT ID 70 (VentStatus) i jest odczytywany w polling loop.
+
   if (status_text_sensor != nullptr) status_text_sensor->publish_state("connected");
 
   unsigned long response = 0;
@@ -329,6 +337,28 @@ inline void BrinkOpenTherm::update() {
     case 21:
       response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 9 << 8));
       if (response && i1_sensor) i1_sensor->publish_state(((int) ((uint8_t) (response & 0xFF))) - 100);
+      step_++;
+      break;
+
+    // --- OT ID 70 (VentStatus): fault indication i ventilation mode ---
+    case 22:
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 70, 0));
+      ESP_LOGD("brink", "OT ID 70 (VentStatus) response: 0x%08lX", response);
+      if (response) {
+        uint16_t status = (response >> 8) & 0xFFFF;  // Low word zawiera status flags
+        // Bit 0: Fault indication (0=OK, 1=Fault)
+        if (fault_indication_binary) {
+          bool fault = (status & 0x01) != 0;
+          ESP_LOGD("brink", "Fault indication: %s", fault ? "YES" : "NO");
+          fault_indication_binary->publish_state(fault);
+        }
+        // Bit 1: Ventilation mode (0=supply only, 1=supply+exhaust)
+        if (ventilation_mode_binary) {
+          bool mode = (status & 0x02) != 0;
+          ESP_LOGD("brink", "Ventilation mode: %s", mode ? "supply+exhaust" : "supply only");
+          ventilation_mode_binary->publish_state(mode);
+        }
+      }
       step_ = 0;  // wracamy do początku
       break;
 
@@ -340,3 +370,5 @@ inline void BrinkOpenTherm::update() {
 
 }  // namespace brink_ventilation
 }  // namespace esphome
+
+
