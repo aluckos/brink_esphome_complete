@@ -1,0 +1,39 @@
+# ESPHome build artifacts
+.esphome/
+.pioenvs/
+.piolibdeps/
+.pio/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Secrets
+secrets.yaml
+*.local.yaml
+
+# Backups
+*.bak
+*.old
+*.backup
+
+# Logs
+*.log
