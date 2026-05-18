@@ -1,30 +1,25 @@
-/* Openhab - Brink Renovent HR Integration
-Author: Raf1000
-December 2021
-*/
-
 #include <Arduino.h>
 #include <OpenTherm.h>
 #include <ESP8266WiFi.h>
 #include <PubSubClient.h>
 
 // this part schall be changed ----------------------------------
-const char* ssid = "SET SSID of YOUR NETWORK";
-const char* password = "PASSWORD";
-
-const char* mqtt_server = "SET MQTT IP"; 
-const char* mqtt_client_id = "brink"; // Unique client id
+const char* ssid = "your wifi"; 
+const char* password = "password";
+const char* mqtt_server = "your IP"; 
+const char* mqtt_client_id = "brink2"; // Unique client id
 const int mqtt_Port = 1883; 
-const char* mqtt_User = "SET MQTT USER"; 
-const char* mqtt_Password = "SET MQTT PASSWORD"; 
-const float maxVent = 2.49; //it means 249 m/h3 - max avilable flow in my Brink - NOT USED
-const unsigned long readPeriod = 1500; // OT protocol requires master to communicate at least every 1 sec (+15% tolerance). 
-// ---------------------------------------------------------------
-const char* mqtt_topic_in = "brink/+/set"; //subscribe commands from Openhab
+const char* mqtt_User = "your user"; 
+const char* mqtt_Password = "your IP"; 
 
+const unsigned long readPeriod = 1500; // 1000 = every second; set between 1000 - 5000 (period when bypass is closed)
+const unsigned long readPeriod_bypass = 120000; // Set +15000 - OT disconnection needed for bypass work (period when bypass is open)
+//-----------------------------------------------------------------------
+
+const char* mqtt_topic_in = "brink/+/set"; //subscribe commands from Openhab
 unsigned long startTime;
 unsigned long currentTime;
-
+unsigned long readOT;           //how often OT shall communicate
 
 const int HWCPin = 14; //Option: HW circulation pump D5
 const int inPin = 4; //ESP8266 D2
@@ -33,29 +28,29 @@ OpenTherm ot(inPin, outPin);
 WiFiClient espClient;
 PubSubClient mqttClient(espClient);
 
+int maxVent = 249; //it means 249 m/h3 - max avilable flow in my Brink 
+float tIn, tIn_old = 0;         //temp external
+float tOut, tOut_old = 0;       //temp internal
+bool fault, fault_old = 1;      //fault code
+bool vmode, vmode_old = 0;      //ventilation mode
+bool bypass, bypass_old = 1;    //bypass mode
+bool filter, filter_old = 1;    //filter replacement indicator
 
-float tIn, tIn_old = 0; // temp external
-float tOut, tOut_old = 0; //temp internal
-bool fault, fault_old = 1; 
-bool vmode, vmode_old = 0;
-bool sbypass, sbypass_old = 1;
-//bool pbypass, pbypass_old;
-bool filter, filter_old = 1;
-int gvent, gvent_old = 0;
-int pressin, pressin_old = 0;
-int pressout, pressout_old = 0; // uint8_t
-int vstep1, vstep1_old = 50;
-int vstep2, vstep2_old = 150;
-int vstep3, vstep3_old = 300;
-int tU4, tU4_old = 1; //atmosphee temp U4
-int tU5, tU5_old = 1; //inside temp U5
-int cvol, cvol_old = 0;
-int RPMin, RPMin_old;
-int RPMout, RPMout_old;
-int fcode, fcode_old = 0;
-int msg, msg_old = 0;
-int param1, param1_old = 100;
-long lRssi, lRssi_old = 0;
+int pressin, pressin_old = 0;   //presure input duct [Pa]
+int pressout, pressout_old = 0; //preasure output duct [Pa]
+int vstep1, vstep1_old = 50;    //U1
+int vstep2, vstep2_old = 150;   //U2
+int vstep3, vstep3_old = 300;   //U3
+int tU4, tU4_old = 1;           //U4 - atmospheric temp threshold for bypass
+int tU5, tU5_old = 1;           //U5 - inside temp threshold for bypass
+int cvol, cvol_old = 0;         //current ventilation capacity (out) [m/h3]
+int RPMin, RPMin_old;           //RPM in - not used
+int RPMout, RPMout_old;         //RPM out - not used
+int fcode, fcode_old = 0;       //fault code
+int msg, msg_old = 0;           //C-operation message
+int param1, param1_old = 100;   //I1- imbalance parameter
+long lRssi, lRssi_old = 0;      //Wifi signal level
+// bool sem_bypass;                //semaphore for bypass workaround
 
 
 void ICACHE_RAM_ATTR handleInterrupt() {
@@ -87,21 +82,33 @@ void MqttReconnect() {
 void MqttCallback(char* topic, byte* payload, unsigned int length) {
   payload[length] = 0;  
 
-// Changing selected Brink Renovent HR parameters requested by OpenHab
-  if(strcmp(topic, "brink/VentNomValue/set") == 0)  ot.setVentilation( atoi((char *)payload) );  // uint8_t
-
-  if(strcmp(topic, "brink/U4/set") == 0) ot.setBrinkTSP(U4, atoi((char *)payload)*2 );
- 
-  if(strcmp(topic, "brink/U5/set") == 0) {
-    ot.setBrinkTSP(U5, atoi((char *)payload)*2 );
-    refreshAll(); // change of U5 triggers refresh of other paramteres
-  }
-
-// HW Circulation pump swith - option
-  if(strcmp(topic, "brink/HWCP/set") == 0)  {
+   // Setting/Changing selected Brink Renovent HR parameters requested by OpenHab
+   if(strcmp(topic, "brink/VentNomValue/set") == 0 ) ot.setVentilation(atoi((char *)payload));  // uint8_t 
+   if(strcmp(topic, "brink/U1/set") == 0) 
+   {
+      ot.setBrinkTSP(U1, atoi((char *)payload) );
+//      delay(100);
+//      if (sem_bypass == 1 ) ot.setVentilation( atoi((char *)payload)* 100 / maxVent );
+       if (bypass == 1 ) ot.setVentilation( atoi((char *)payload)* 100 / maxVent );
+   }
+   if(strcmp(topic, "brink/U2/set") == 0) ot.setBrinkTSP(U2, atoi((char *)payload) );
+   if(strcmp(topic, "brink/U3/set") == 0) {
+      ot.setBrink2TSP(U3, atoi((char *)payload) );
+      delay(100);
+      ReadBrinkParameters() ;
+//      refreshAll(); // change of U5 triggers refresh of other paramteres
+   } 
+   if(strcmp(topic, "brink/U4/set") == 0) ot.setBrinkTSP(U4, atoi((char *)payload)*2 );
+   if(strcmp(topic, "brink/U5/set") == 0) ot.setBrinkTSP(U5, atoi((char *)payload)*2 );
+    
+   if(strcmp(topic, "brink/I1/set") == 0)ot.setBrinkTSP(I1, atoi((char *)payload)+ 100 );
+    
+   // HW Circulation pump swith - option
+   if(strcmp(topic, "brink/HWCP/set") == 0)  {
       if ( *payload == '1' ) digitalWrite(HWCPin, LOW); // realy switch on
       if ( *payload == '0' ) digitalWrite(HWCPin, HIGH); // realy swich off
   }
+  
 }
 
 void setup()
@@ -125,6 +132,14 @@ void setup()
 
     startTime = millis(); 
     ot.begin(handleInterrupt);
+    delay(100);
+    maxVent = ot.getBrink2TSP(MaxVol);
+    ReadBrinkParameters();
+    refreshAll();
+//    sem_bypass = bypass;
+    if (bypass == 1 ) readOT = readPeriod_bypass; //bypass open
+    else readOT = readPeriod; //bypass closed
+    
     
 // Floor heting pump switch - option
     pinMode(HWCPin, OUTPUT); 
@@ -143,11 +158,9 @@ void refreshAll()
 
     mqttClient.publish("brink/VentilationMode/get", String(vmode).c_str());
  
-    mqttClient.publish("brink/BypassStaus/get", String(sbypass).c_str());
+    mqttClient.publish("brink/BypassStaus/get", String(bypass).c_str());
   
     mqttClient.publish("brink/FilterDirty/get", String(filter).c_str());
- 
-    mqttClient.publish("brink/VentilationNominalValue/get", String(gvent * 2.48).c_str());
    
     mqttClient.publish("brink/CurrentVolume/get", String(cvol).c_str());
  
@@ -169,8 +182,9 @@ void refreshAll()
     
     mqttClient.publish("brink/Wifi/get", String(lRssi).c_str());
 
-    mqttClient.publish("brink/OpenThermStatus/get", "WORK"); 
+ //   mqttClient.publish("brink/OpenThermStatus/get", "WORK"); 
 }
+
 
 void loop()
 {
@@ -178,29 +192,70 @@ void loop()
   {
     MqttReconnect(); 
     mqttClient.publish("brink/OpenThermStatus/get", "WORK"); 
-   
   }
   mqttClient.loop();
   
   currentTime = millis(); 
-  if (currentTime - startTime >= readPeriod)  
+  if (currentTime - startTime >= readOT)  
   {
-    ReadBrinkParameters();
-
+    ReadBrinkParameters(); 
     lRssi = WiFi.RSSI(); //long
-    if ( abs(lRssi- lRssi_old) > 2) {   //reduce data publication due frequent slight changes of signal
+    if ( abs(lRssi- lRssi_old) > 2) //reduce data publication due frequent slight changes of signal
+    {   
       mqttClient.publish("brink/Wifi/get", String(lRssi).c_str());
       lRssi_old = lRssi;
     }
+    
+    // Workaround for bypass change and keeping change when U4 and U5 conditions are met - Seems not working
+/*    if (sem_bypass == 0)  //bypass is CLOSED
+    {
+       if ( (tOut > tU5/2) && (tIn > tU4/2) && (tIn < tOut) ) // if true open bypass, 
+       {
+          mqttClient.publish("brink/OpenThermStatus/get", "WAIT"); // wait for bypass change
+          delay(150000); //stop 2,5 min  
+          readOT = readPeriod_bypass;
+          sem_bypass = 1; 
+       }
+    }
+    if (sem_bypass == 1) //bypass is OPEN
+    {  
+       if ( (tOut <= tU5/2) || (tIn <= tU4/2) || (tIn >= tOut)  ) //if true close bypass
+       {
+          mqttClient.publish("brink/OpenThermStatus/get","WAIT"); // wait for bypass change
+          delay(150000); //stop 2,5 min
+          readOT = readPeriod;
+          sem_bypass = 0; 
+       }
+    } */
+ // NEW Workaround for bypass change and keeping change when U4 and U5 conditions are met
+    if ( (tOut >= tU5/2) && (tIn >= tU4/2) && (tIn <= tOut) ) 
+    {
+        if ( bypass == 0 ) 
+        {
+            mqttClient.publish("brink/OpenThermStatus/get", "WAIT"); // wait for bypass change
+            delay(150000); //stop 2,5 min  
+            readOT = readPeriod_bypass;
+        }
+        else if ( readOT == readPeriod ) readOT = readPeriod_bypass;
+     }
+    else
+    {
+        if ( bypass == 1 )
+        {
+            mqttClient.publish("brink/OpenThermStatus/get","WAIT"); // wait for bypass change
+            delay(150000); //stop 2,5 min
+            readOT = readPeriod;
+        }
+        else if ( readOT == readPeriod_bypass ) readOT = readPeriod;
+    }  
     startTime = currentTime;  
   }
-
+  
 }
 
-//Reading selected Brink Renovent HR parameters, Mqtt publication only if a value has changed
+//Reading all requested Brink HR parameters, Mqtt publication only if a value has changed
 void ReadBrinkParameters() 
 {
-
   tIn  = ot.getVentSupplyInTemperature(); 
   if ( abs(tIn - tIn_old) > 0.2)  {  //reduce data publication due frequent slight changes of temp
       mqttClient.publish("brink/TempSupplyIn/get", String(tIn).c_str());
@@ -225,19 +280,11 @@ void ReadBrinkParameters()
       vmode_old = vmode;
   }
        
-  sbypass = ot.getBrinkTSP(BypassStatus);         // ot.getBypassStatus() - this method does not work
-  if (sbypass != sbypass_old) {
-     mqttClient.publish("brink/BypassStaus/get", String(sbypass).c_str());
-     sbypass_old = sbypass;
+  bypass = ot.getBrinkTSP(BypassStatus);         // ot.getBypassStatus() - this method does not work
+  if (bypass != bypass_old) {
+     mqttClient.publish("brink/BypassStaus/get", String(bypass).c_str());
+     bypass_old = bypass;
   }
-
-/* does not work
-  pbypass = ot.getBypassPosition();
-  if (pbypass != pbypass_old) {
-     mqttClient.publish("brink/BypassPosition/get", String(pbypass).c_str());
-     pbypass_old = pbypass;
-  }
-*/
 
   filter = ot.getDiagnosticIndication();
   if (filter != filter_old) {
@@ -245,19 +292,13 @@ void ReadBrinkParameters()
       filter_old = filter;
   }
 
-  gvent =  ot.getVentilation();
-  if (gvent != gvent_old) {
-      mqttClient.publish("brink/VentilationNominalValue/get", String(gvent * 2.49).c_str());
-      gvent_old = gvent;
-  }
-
-  pressin = ot.getBrinkTSP(CPID);
+  pressin = ot.getBrink2TSP(CPID);
   if ( abs(pressin - pressin_old) > 1 ) { //reduce data publication due frequent slight changes of preassure
       mqttClient.publish("brink/CPID/get", String(pressin).c_str());
       pressin_old = pressin;
   }
  
-  pressout = ot.getBrinkTSP(CPOD); 
+  pressout = ot.getBrink2TSP(CPOD); 
   if ( abs(pressout - pressout_old) > 1)  {  //reduce data publication due frequent slight changes of preassure
       mqttClient.publish("brink/CPOD/get", String(pressout).c_str());
       pressout_old = pressout;
@@ -287,7 +328,7 @@ void ReadBrinkParameters()
       vstep2_old = vstep2;
   }
 
-  vstep3 = ot.getBrinkTSP(U3);
+  vstep3 = ot.getBrink2TSP(U3);
   if (vstep3 != vstep3_old) {
       mqttClient.publish("brink/U3/get", String(vstep3).c_str());
       vstep3_old = vstep3;
@@ -316,5 +357,5 @@ void ReadBrinkParameters()
       mqttClient.publish("brink/I1/get", String(param1 - 100).c_str());
       param1_old = param1;
   }
-
+   mqttClient.publish("brink/OpenThermStatus/get", "WORK"); //means OT is connected
 }
