@@ -243,11 +243,13 @@ inline void BrinkOpenTherm::update() {
       step_++;
       break;
 
-    // --- bypass status: TSP 55 ---
+    // --- bypass status: TSP 54 (not 55!) ---
     case 8:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 55 << 8));
+      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 54 << 8));
+      ESP_LOGD("brink", "TSP 54 (bypass) response: 0x%08lX", response);
       if (response) {
         uint8_t v = (uint8_t) (response & 0xFF);
+        ESP_LOGD("brink", "Bypass status raw: %d (0=closed, 1=auto, 2=inlet_min)", v);
         if (bypass_status_sensor) bypass_status_sensor->publish_state(v);
         publish_bypass_text_(v);
       }
