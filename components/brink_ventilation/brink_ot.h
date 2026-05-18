@@ -497,7 +497,7 @@ inline void BrinkOpenTherm::update() {
           ventilation_mode_binary->publish_state(mode);
         }
       }
-      step_ = 0;  // wracamy do początku
+      step_++;  // kontynuuj do następnych case
       break;
 
     // --- RPM wentylatorów ---
