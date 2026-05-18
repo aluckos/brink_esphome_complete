@@ -139,8 +139,8 @@ inline void BrinkNumber::control(float value) {
 inline void BrinkOpenTherm::update() {
   if (ot == nullptr) return;
 
-  // keep-alive (ID 0)
-  ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 0, 0x0100));
+  // keep-alive (ID 0) - COMMENTED OUT TO TEST IF IT BLOCKS DATA READS
+  // ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 0, 0x0100));
   if (status_text_sensor != nullptr) status_text_sensor->publish_state("connected");
 
   unsigned long response = 0;
