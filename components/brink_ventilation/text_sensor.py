@@ -8,6 +8,7 @@ from . import BRINK_VENTILATION_ID, BrinkOpenTherm
 TYPES = {
     "STATUS": "Brink Status Komunikacji",
     "BYPASS_STATUS_TEXT": "Brink Bypass status (text)",
+    "MSG_OPERATION_TEXT": "Brink Message Operation (decoded)",
 }
 
 CONFIG_SCHEMA = text_sensor.text_sensor_schema().extend(
@@ -25,3 +26,5 @@ async def to_code(config):
         cg.add(parent.set_status_text_sensor(var))
     elif config[CONF_TYPE] == "BYPASS_STATUS_TEXT":
         cg.add(parent.set_bypass_status_text(var))
+    elif config[CONF_TYPE] == "MSG_OPERATION_TEXT":
+        cg.add(parent.set_msg_operation_text(var))

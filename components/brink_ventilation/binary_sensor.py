@@ -9,6 +9,7 @@ TYPES = {
     "FILTER_STATUS": DEVICE_CLASS_PROBLEM,
     "FAULT_INDICATION": DEVICE_CLASS_PROBLEM,    # OT ID 70 bit 0
     "VENTILATION_MODE": None,                     # OT ID 70 bit 1 (no device class)
+    "INIT_STATUS": None,                          # TSP 57 (0/1 - appliance initiated)
 }
 
 CONFIG_SCHEMA = binary_sensor.binary_sensor_schema(
