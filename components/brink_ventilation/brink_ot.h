@@ -87,6 +87,9 @@ class BrinkOpenTherm : public PollingComponent {
   // pomocnicze do 2-bajtowych TSP
   uint8_t tsp_low_byte_{0};
 
+  // status tracking - publikuj tylko przy zmianie
+  std::string last_status_{""};
+
   // --- encje ESPHome (wsk. ustawiane z pythonowych platform) ---
   // Temperatury (OT IDs 80-83)
   sensor::Sensor *t_supply_in_sensor{nullptr};    // ID 80
@@ -271,7 +274,14 @@ inline void BrinkOpenTherm::update() {
   // Nie używamy OT ID 0 (status boiler) - to jest dla kotłów, nie dla central wentylacyjnych!
   // Ventilation status to OT ID 70 (VentStatus) i jest odczytywany w polling loop.
 
-  if (status_text_sensor != nullptr) status_text_sensor->publish_state("connected");
+  // Publikuj status tylko jeśli się zmienił
+  if (status_text_sensor != nullptr) {
+    std::string current_status = "connected";
+    if (current_status != last_status_) {
+      status_text_sensor->publish_state(current_status);
+      last_status_ = current_status;
+    }
+  }
 
   unsigned long response = 0;
 
