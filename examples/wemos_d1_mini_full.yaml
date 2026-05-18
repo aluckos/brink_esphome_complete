@@ -112,6 +112,12 @@ binary_sensor:
   - platform: brink_ventilation
     type: FILTER_STATUS
     name: "Filtr - status"
+  - platform: brink_ventilation
+    type: FAULT_INDICATION
+    name: "Błąd / Awaria"
+  - platform: brink_ventilation
+    type: VENTILATION_MODE
+    name: "Tryb wentylacji"
 
 text_sensor:
   - platform: brink_ventilation
