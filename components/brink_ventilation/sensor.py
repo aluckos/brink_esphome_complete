@@ -12,55 +12,46 @@ from . import BRINK_VENTILATION_ID, BrinkOpenTherm
 
 TYPES = {
     # Temperatury (OT 80-83)
-    "T_SUPPLY_IN": ["Brink Temp Czerpnia (T1)", UNIT_CELSIUS, 1, DEVICE_CLASS_TEMPERATURE],
-    "T_SUPPLY_OUT": ["Brink Temp Nawiew (T2)", UNIT_CELSIUS, 1, DEVICE_CLASS_TEMPERATURE],
-    "T_EXHAUST_IN": ["Brink Temp Wywiew (T3)", UNIT_CELSIUS, 1, DEVICE_CLASS_TEMPERATURE],
-    "T_EXHAUST_OUT": ["Brink Temp Wyrzutnia (T4)", UNIT_CELSIUS, 1, DEVICE_CLASS_TEMPERATURE],
-
-    # Przepływ (Twoje TSP 52/53 jako 2 bajty)
-    "CURRENT_FLOW": ["Brink Przepływ", "m³/h", 0, None],
-
-    # Ciśnienia (Pa) - CPID/CPOD (TSP 64/65, 66/67)
-    "CPID": ["Brink Ciśnienie nawiewu (CPID)", "Pa", 0, None],
-    "CPOD": ["Brink Ciśnienie wywiewu (CPOD)", "Pa", 0, None],
-
-    # U1/U2/U3: kroki wydatku (m3/h) – w OpenHAB są 2-bajtowe
-    "U1": ["Brink U1 (step 1)", "m³/h", 0, None],
-    "U2": ["Brink U2 (step 2)", "m³/h", 0, None],
-    "U3": ["Brink U3 (step 3)", "m³/h", 0, None],
-
-    # U4/U5: progi bypassu (°C), w protokole *2, więc w C++ dzielimy przez 2
-    "U4": ["Brink U4 (bypass atmo threshold)", UNIT_CELSIUS, 1, DEVICE_CLASS_TEMPERATURE],
-    "U5": ["Brink U5 (bypass indoor threshold)", UNIT_CELSIUS, 1, DEVICE_CLASS_TEMPERATURE],
-
-    # I1: imbalance (wartość -100)
-    "I1": ["Brink I1 (imbalance)", "%", 0, None],
-
-    # Bypass status (0/1/2)
-    "BYPASS_STATUS": ["Brink Bypass status", "", 0, None],
+    "T_SUPPLY_IN": "t_supply_in",
+    "T_SUPPLY_OUT": "t_supply_out",
+    "T_EXHAUST_IN": "t_exhaust_in",
+    "T_EXHAUST_OUT": "t_exhaust_out",
+    # Przepływ
+    "CURRENT_FLOW": "current_flow",
+    # Ciśnienia CPID/CPOD
+    "CPID": "cpid",
+    "CPOD": "cpod",
+    # U1-U3: kroki wydatku
+    "U1": "u1",
+    "U2": "u2",
+    "U3": "u3",
+    # U4/U5: progi bypassu
+    "U4": "u4",
+    "U5": "u5",
+    # I1: imbalance
+    "I1": "i1",
+    # Bypass status
+    "BYPASS_STATUS": "bypass_status",
 }
 
-CONFIG_SCHEMA = sensor.sensor_schema(
-    state_class=STATE_CLASS_MEASUREMENT,
-).extend(
-    {
-        cv.GenerateID(BRINK_VENTILATION_ID): cv.use_id(BrinkOpenTherm),
-        cv.Required(CONF_TYPE): cv.one_of(*TYPES, upper=True),
-    }
-).extend(cv.COMPONENT_SCHEMA)
+CONFIG_SCHEMA = cv.All(
+    sensor.sensor_schema(
+        state_class=STATE_CLASS_MEASUREMENT,
+    ).extend(
+        {
+            cv.GenerateID(BRINK_VENTILATION_ID): cv.use_id(BrinkOpenTherm),
+            cv.Required(CONF_TYPE): cv.one_of(*TYPES, upper=True),
+        }
+    )
+)
 
 async def to_code(config):
     parent = await cg.get_variable(config[BRINK_VENTILATION_ID])
-    conf_data = TYPES[config[CONF_TYPE]]
+    sensor_type = config[CONF_TYPE]
 
     var = await sensor.new_sensor(config)
 
-    # jednostki / dokładność / device class
-    if conf_data[1] is not None:
-        cg.add(var.set_unit_of_measurement(conf_data[1]))
-    cg.add(var.set_accuracy_decimals(conf_data[2]))
-    if conf_data[3] is not None:
-        cg.add(var.set_device_class(conf_data[3]))
-
-    func = getattr(parent, f"set_{config[CONF_TYPE].lower()}_sensor")
+    # Wywołaj odpowiednią metodę set_XXX_sensor w C++
+    func_name = f"set_{TYPES[sensor_type]}_sensor"
+    func = getattr(parent, func_name)
     cg.add(func(var))
