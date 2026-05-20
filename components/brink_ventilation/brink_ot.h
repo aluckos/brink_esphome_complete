@@ -416,18 +416,24 @@ inline void BrinkOpenTherm::handle_response() {
 	  break;
 
 	case 3:  // T1 - ALWAYS WORKING
-	  if (ot->isValidResponse(response) && t_supply_in_sensor) {
+	  ESP_LOGD("brink", "T1 response: valid=%d, sensor=%p", ot->isValidResponse(response), t_supply_in_sensor);
+	  if (ot->isValidResponse(response)) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T1: %.2f°C", temp);
-		t_supply_in_sensor->publish_state(temp);
+		if (t_supply_in_sensor) {
+		  t_supply_in_sensor->publish_state(temp);
+		}
 	  }
 	  break;
 
 	case 4:  // T3 - ALWAYS WORKING
-	  if (ot->isValidResponse(response) && t_exhaust_in_sensor) {
+	  ESP_LOGD("brink", "T3 response: valid=%d, sensor=%p", ot->isValidResponse(response), t_exhaust_in_sensor);
+	  if (ot->isValidResponse(response)) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T3: %.2f°C", temp);
-		t_exhaust_in_sensor->publish_state(temp);
+		if (t_exhaust_in_sensor) {
+		  t_exhaust_in_sensor->publish_state(temp);
+		}
 	  }
 	  break;
 
