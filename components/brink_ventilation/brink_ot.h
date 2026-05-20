@@ -3,11 +3,6 @@
 #include "esphome.h"
 #include "OpenTherm.h"
 
-// Try to include API if available
-#ifdef USE_API
-#include "esphome/components/api/api_server.h"
-#endif
-
 namespace esphome {
 namespace brink_ventilation {
 
@@ -173,10 +168,10 @@ class BrinkOpenTherm : public PollingComponent {
   void apply_preset(const std::string &preset);
   void write_u_preset(uint8_t preset_num, uint16_t value);
 
-  // API readiness gate
-  void mark_api_ready() { 
+  // Enable OpenTherm polling (called from ESPHome on_boot automation)
+  void enable_polling() { 
     if (!api_ready_) {
-      ESP_LOGI("brink", "API ready - enabling OpenTherm polling");
+      ESP_LOGI("brink", "==== ENABLING OPENTHERM POLLING ====");
       api_ready_ = true;
     }
   }
@@ -260,30 +255,16 @@ inline void BrinkOpenTherm::setup() {
 
   ESP_LOGI("brink", "==== BRINK OPENTHERM SETUP ====");
   ESP_LOGI("brink", "Initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
-  ESP_LOGI("brink", "Waiting for API connection before starting polling...");
-  ESP_LOGI("brink", "api_ready_ = %d", api_ready_);
+  ESP_LOGI("brink", "OpenTherm polling DISABLED - waiting for enable_polling() call");
+  ESP_LOGI("brink", "Add 'on_boot' automation in YAML to call id(my_brink).enable_polling()");
 }
 
 inline void BrinkOpenTherm::loop() {
   if (ot == nullptr) return;
 
-  // Wait for API readiness before starting any OT traffic
+  // Wait until enable_polling() is called (typically from on_boot automation)
   if (!api_ready_) {
-	// Try to check if API is connected (works if api component is compiled in)
-	#ifdef USE_API
-	if (api::global_api_server != nullptr && api::global_api_server->is_connected()) {
-	  ESP_LOGI("brink", "==== API CONNECTED - STARTING OT POLLING ====");
-	  mark_api_ready();
-	}
-	#else
-	// If USE_API not defined, start after 5 seconds (API may still exist but we can't check at compile time)
-	static uint32_t start_time = millis();
-	if (millis() - start_time > 5000) {
-	  ESP_LOGW("brink", "==== NO API CHECK - STARTING OT AFTER 5s ====");
-	  mark_api_ready();
-	}
-	#endif
-	return; // Don't start polling until mark_api_ready() is called
+	return;
   }
 
   // Log startup status on first few iterations
