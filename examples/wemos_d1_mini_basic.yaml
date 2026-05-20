@@ -64,18 +64,6 @@ sensor:
     name: "Bypass status (0-1-2)"
     accuracy_decimals: 0
 
-  - platform: brink_ventilation
-    type: CPID
-    name: "Ciśnienie nawiewu (CPID)"
-    unit_of_measurement: "Pa"
-    accuracy_decimals: 0
-
-  - platform: brink_ventilation
-    type: CPOD
-    name: "Ciśnienie wywiewu (CPOD)"
-    unit_of_measurement: "Pa"
-    accuracy_decimals: 0
-
 number:
   - platform: brink_ventilation
     name: "Nastawa mocy (ID71)"

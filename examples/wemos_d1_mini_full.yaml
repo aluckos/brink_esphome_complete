@@ -52,23 +52,13 @@ sensor:
 
   - platform: brink_ventilation
     type: CURRENT_FLOW
-    name: "Przepływ (TSP 52-53)"
+    name: "Aktualny Przepływ" #(TSP 52-53)
     unit_of_measurement: "m³/h"
     accuracy_decimals: 0
 
   - platform: brink_ventilation
     type: BYPASS_STATUS
     name: "Bypass status (0-1-2)"
-    accuracy_decimals: 0
-  - platform: brink_ventilation
-    type: CPID
-    name: "Ciśnienie nawiewu (CPID)"
-    unit_of_measurement: "Pa"
-    accuracy_decimals: 0
-  - platform: brink_ventilation
-    type: CPOD
-    name: "Ciśnienie wywiewu (CPOD)"
-    unit_of_measurement: "Pa"
     accuracy_decimals: 0
 
   - platform: brink_ventilation
@@ -166,18 +156,19 @@ sensor:
     accuracy_decimals: 0
 
   # === TSP 57-59, 68-71 ===
-  - platform: brink_ventilation
-    type: VOLTAGE_PARAM1
-    name: "Napięcie param1 (wilgoć)"
-    unit_of_measurement: "V"
-    icon: "mdi:flash"
-    accuracy_decimals: 1
-  - platform: brink_ventilation
-    type: VOLTAGE_PARAM2
-    name: "Napięcie param2 (CO2)"
-    unit_of_measurement: "V"
-    icon: "mdi:flash"
-    accuracy_decimals: 1
+  # TSP 58/59 (Voltage Param1/2) - OPTIONAL sensors, not installed in most systems
+  # - platform: brink_ventilation
+  #   type: VOLTAGE_PARAM1
+  #   name: "Napięcie param1 (wilgoć)"
+  #   unit_of_measurement: "V"
+  #   icon: "mdi:flash"
+  #   accuracy_decimals: 1
+  # - platform: brink_ventilation
+  #   type: VOLTAGE_PARAM2
+  #   name: "Napięcie param2 (CO2)"
+  #   unit_of_measurement: "V"
+  #   icon: "mdi:flash"
+  #   accuracy_decimals: 1
   - platform: brink_ventilation
     type: FROST_STATUS
     name: "Status mrozu"
@@ -225,7 +216,7 @@ binary_sensor:
     name: "Filtr - status"
   - platform: brink_ventilation
     type: FAULT_INDICATION
-    name: "Błąd / Awaria"
+    name: "Awaria"
   - platform: brink_ventilation
     type: VENTILATION_MODE
     name: "Tryb wentylacji"
