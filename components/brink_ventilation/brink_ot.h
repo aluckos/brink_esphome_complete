@@ -3,6 +3,7 @@
 #include "esphome.h"
 #include "OpenTherm.h"
 
+// Try to include API if available
 #ifdef USE_API
 #include "esphome/components/api/api_server.h"
 #endif
@@ -257,15 +258,10 @@ inline void BrinkOpenTherm::setup() {
   ot = new OpenTherm(pin_in, pin_out);
   ot->begin(handleInterrupt);
 
-  ESP_LOGI("brink", "Async OpenTherm initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
-
-  #ifdef USE_API
-  ESP_LOGI("brink", "Waiting for API connection before starting OpenTherm polling...");
-  #else
-  // No API component - start immediately
-  ESP_LOGI("brink", "No API configured - starting OpenTherm immediately");
-  mark_api_ready();
-  #endif
+  ESP_LOGI("brink", "==== BRINK OPENTHERM SETUP ====");
+  ESP_LOGI("brink", "Initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
+  ESP_LOGI("brink", "Waiting for API connection before starting polling...");
+  ESP_LOGI("brink", "api_ready_ = %d", api_ready_);
 }
 
 inline void BrinkOpenTherm::loop() {
@@ -273,9 +269,17 @@ inline void BrinkOpenTherm::loop() {
 
   // Wait for API readiness before starting any OT traffic
   if (!api_ready_) {
+	// Try to check if API is connected (works if api component is compiled in)
 	#ifdef USE_API
-	// Check if API connected and auto-enable OT polling
 	if (api::global_api_server != nullptr && api::global_api_server->is_connected()) {
+	  ESP_LOGI("brink", "==== API CONNECTED - STARTING OT POLLING ====");
+	  mark_api_ready();
+	}
+	#else
+	// If USE_API not defined, start after 5 seconds (API may still exist but we can't check at compile time)
+	static uint32_t start_time = millis();
+	if (millis() - start_time > 5000) {
+	  ESP_LOGW("brink", "==== NO API CHECK - STARTING OT AFTER 5s ====");
 	  mark_api_ready();
 	}
 	#endif
