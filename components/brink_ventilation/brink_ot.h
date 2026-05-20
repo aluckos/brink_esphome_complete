@@ -392,6 +392,16 @@ inline void BrinkOpenTherm::start_next_request() {
 }
 
 inline void BrinkOpenTherm::handle_response() {
+  // Publish communication status
+  if (status_text_sensor) {
+	const char* status_cstr = ot->statusToString(last_response_status_);
+	std::string status_str = status_cstr ? status_cstr : "UNKNOWN";
+	if (status_str != last_status_) {
+	  status_text_sensor->publish_state(status_str);
+	  last_status_ = status_str;
+	}
+  }
+
   // Check response status
   if (last_response_status_ != OpenThermResponseStatus::SUCCESS) {
 	ESP_LOGW("brink", "Step %d: Response status: %s", 
