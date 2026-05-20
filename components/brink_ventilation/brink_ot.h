@@ -113,6 +113,9 @@ class BrinkOpenTherm : public PollingComponent {
   bool startup_read_done_{false};
   uint8_t startup_step_{0};
 
+  // API connection gate - wait for API before starting OT polling
+  bool api_ready_{false};
+
   // --- encje ESPHome ---
   sensor::Sensor *t_supply_in_sensor{nullptr};
   sensor::Sensor *t_supply_out_sensor{nullptr};
@@ -168,6 +171,14 @@ class BrinkOpenTherm : public PollingComponent {
   void set_bypass_mode(const std::string &mode);
   void apply_preset(const std::string &preset);
   void write_u_preset(uint8_t preset_num, uint16_t value);
+
+  // API readiness gate
+  void mark_api_ready() { 
+    if (!api_ready_) {
+      ESP_LOGI("brink", "API ready - enabling OpenTherm polling");
+      api_ready_ = true;
+    }
+  }
 
   // Settery (same as sync version)
   void set_t_supply_in_sensor(sensor::Sensor *s) { t_supply_in_sensor = s; }
@@ -247,30 +258,29 @@ inline void BrinkOpenTherm::setup() {
   ot->begin(handleInterrupt);
 
   ESP_LOGI("brink", "Async OpenTherm initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
-  ESP_LOGI("brink", "Startup read will begin on first loop() when OT is ready");
+
+  #ifdef USE_API
+  ESP_LOGI("brink", "Waiting for API connection before starting OpenTherm polling...");
+  #else
+  // No API component - start immediately
+  ESP_LOGI("brink", "No API configured - starting OpenTherm immediately");
+  mark_api_ready();
+  #endif
 }
 
 inline void BrinkOpenTherm::loop() {
   if (ot == nullptr) return;
 
-  // Check if API is connected - don't start polling until API connects
-  #ifdef USE_API
-  static bool api_wait_logged = false;
-  if (!api::global_api_server->is_connected()) {
-	if (!api_wait_logged) {
-	  ESP_LOGI("brink", "Waiting for API connection before starting OpenTherm polling...");
-	  api_wait_logged = true;
+  // Wait for API readiness before starting any OT traffic
+  if (!api_ready_) {
+	#ifdef USE_API
+	// Check if API connected and auto-enable OT polling
+	if (api::global_api_server != nullptr && api::global_api_server->is_connected()) {
+	  mark_api_ready();
 	}
-	return; // Wait for API connection
+	#endif
+	return; // Don't start polling until mark_api_ready() is called
   }
-
-  // Log when API connects for the first time
-  static bool api_connected_logged = false;
-  if (!api_connected_logged) {
-	ESP_LOGI("brink", "API connected! Starting OpenTherm communication");
-	api_connected_logged = true;
-  }
-  #endif
 
   // Log startup status on first few iterations
   static uint8_t startup_log_count = 0;
