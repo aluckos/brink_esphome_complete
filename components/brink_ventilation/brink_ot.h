@@ -243,10 +243,19 @@ inline void BrinkOpenTherm::setup() {
   ot->begin(handleInterrupt);
 
   ESP_LOGI("brink", "Async OpenTherm initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
+  ESP_LOGI("brink", "Startup read will begin on first loop() when OT is ready");
 }
 
 inline void BrinkOpenTherm::loop() {
   if (ot == nullptr) return;
+
+  // Log startup status on first few iterations
+  static uint8_t startup_log_count = 0;
+  if (!startup_read_done_ && startup_log_count < 5) {
+    ESP_LOGD("brink", "loop() - startup_read_done=false, startup_step=%d, async_state=%d, ot->isReady=%d",
+             startup_step_, (int)async_state_, ot->isReady());
+    startup_log_count++;
+  }
 
   // Non-blocking process - check OT state machine
   ot->process();
