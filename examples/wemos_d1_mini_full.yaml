@@ -1,6 +1,12 @@
 esphome:
   name: brink-ot-full
   friendly_name: Brink OT Full
+  on_boot:
+    priority: -100  # Start after API connects (default priority -100 is after API)
+    then:
+      - logger.log: "System boot complete, API connected - enabling OpenTherm polling"
+      - lambda: |-
+          id(my_brink).enable_polling();
 
 esp8266:
   board: d1_mini
