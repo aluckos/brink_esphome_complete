@@ -105,12 +105,8 @@ class BrinkOpenTherm : public PollingComponent {
   unsigned long last_response_{0};
   OpenThermResponseStatus last_response_status_{OpenThermResponseStatus::NONE};
 
-  // Startup one-time read for constant parameters
-  bool startup_read_done_{false};
-  uint8_t startup_step_{0};
-
-  // API connection gate - wait for API before starting OT polling
-  bool api_ready_{false};
+  // Periodic read counter for slow-changing values (MAX_VOL, MIN_VOL)
+  uint8_t slow_read_counter_{0};
 
   // --- encje ESPHome ---
   sensor::Sensor *t_supply_in_sensor{nullptr};
@@ -167,14 +163,6 @@ class BrinkOpenTherm : public PollingComponent {
   void set_bypass_mode(const std::string &mode);
   void apply_preset(const std::string &preset);
   void write_u_preset(uint8_t preset_num, uint16_t value);
-
-  // Enable OpenTherm polling (called from ESPHome on_boot automation)
-  void enable_polling() { 
-    if (!api_ready_) {
-      ESP_LOGI("brink", "==== ENABLING OPENTHERM POLLING ====");
-      api_ready_ = true;
-    }
-  }
 
   // Settery (same as sync version)
   void set_t_supply_in_sensor(sensor::Sensor *s) { t_supply_in_sensor = s; }
@@ -253,27 +241,11 @@ inline void BrinkOpenTherm::setup() {
   ot = new OpenTherm(pin_in, pin_out);
   ot->begin(handleInterrupt);
 
-  ESP_LOGI("brink", "==== BRINK OPENTHERM SETUP ====");
-  ESP_LOGI("brink", "Initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
-  ESP_LOGI("brink", "OpenTherm polling DISABLED - waiting for enable_polling() call");
-  ESP_LOGI("brink", "Add 'on_boot' automation in YAML to call id(my_brink).enable_polling()");
+  ESP_LOGI("brink", "Async OpenTherm initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
 }
 
 inline void BrinkOpenTherm::loop() {
   if (ot == nullptr) return;
-
-  // Wait until enable_polling() is called (typically from on_boot automation)
-  if (!api_ready_) {
-	return;
-  }
-
-  // Log startup status on first few iterations
-  static uint8_t startup_log_count = 0;
-  if (!startup_read_done_ && startup_log_count < 5) {
-	ESP_LOGD("brink", "loop() - startup_read_done=false, startup_step=%d, async_state=%d, ot->isReady=%d",
-			 startup_step_, (int)async_state_, ot->isReady());
-	startup_log_count++;
-  }
 
   // Non-blocking process - check OT state machine
   ot->process();
@@ -286,20 +258,16 @@ inline void BrinkOpenTherm::loop() {
 	handle_response();
   }
 
-  // One-time startup read for MAX_VOL and MIN_VOL
-  if (!startup_read_done_ && async_state_ == AsyncState::IDLE && ot->isReady()) {
-	start_startup_read();
-	return; // Don't start normal polling yet
-  }
-
-  // If idle and OT ready, try to send next request (normal polling)
-  if (startup_read_done_ && async_state_ == AsyncState::IDLE && ot->isReady()) {
+  // If idle and OT ready, try to send next request
+  if (async_state_ == AsyncState::IDLE && ot->isReady()) {
 	start_next_request();
   }
 }
 
 inline void BrinkOpenTherm::update() {
-  if (ot == nullptr) return;
+  // Increment slow read counter (for MAX_VOL/MIN_VOL periodic reads)
+  slow_read_counter_++;
+}
 
   // Log startup status on first update() call
   static bool first_update = true;
@@ -316,55 +284,6 @@ inline void BrinkOpenTherm::update() {
 	  status_text_sensor->publish_state(current_status);
 	  last_status_ = current_status;
 	}
-  }
-
-  // DON'T restart if we're still in the middle of a polling cycle
-  // Only restart if IDLE and at the beginning (step 0) AND startup is complete
-  if (startup_read_done_ && async_state_ == AsyncState::IDLE && step_ == 0) {
-	ESP_LOGV("brink", "update() - Starting new polling cycle");
-	start_next_request();
-  } else if (!startup_read_done_) {
-	ESP_LOGV("brink", "update() - Waiting for startup read to complete");
-  } else {
-	ESP_LOGV("brink", "update() - Skipping, cycle in progress (step=%d, state=%d)", step_, (int)async_state_);
-  }
-}
-
-inline void BrinkOpenTherm::start_startup_read() {
-  unsigned long request = 0;
-
-  switch (startup_step_) {
-    case 0:  // MaxVol LB (TSP 56)
-      request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 56 << 8);
-      ESP_LOGI("brink", "Startup read: MaxVol LB (TSP 56)");
-      break;
-
-    case 1:  // MaxVol HB (TSP 57)
-      request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
-      ESP_LOGI("brink", "Startup read: MaxVol HB (TSP 57)");
-      break;
-
-    case 2:  // MinVol LB (TSP 58)
-      request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 58 << 8);
-      ESP_LOGI("brink", "Startup read: MinVol LB (TSP 58)");
-      break;
-
-    case 3:  // MinVol HB (TSP 59)
-      request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 59 << 8);
-      ESP_LOGI("brink", "Startup read: MinVol HB (TSP 59)");
-      break;
-
-    default:
-      startup_read_done_ = true;
-      ESP_LOGI("brink", "Startup read complete, starting normal polling");
-      return;
-  }
-
-  if (ot->sendRequestAync(request)) {
-    async_state_ = AsyncState::WAITING;
-    ESP_LOGV("brink", "Startup request sent for step %d", startup_step_);
-  } else {
-    ESP_LOGW("brink", "Failed to send startup request for step %d, OT not ready", startup_step_);
   }
 }
 
@@ -413,25 +332,67 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 54 (Bypass)", step_);
 	  break;
 
+	// === Periodic slow reads (every ~30 min) ===
+	case 7:  // MAX_VOL: TSP 56 LB
+	  // Read only every 1200 cycles (~30 min at 1.5s update interval)
+	  if (slow_read_counter_ % 1200 == 0) {
+		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 56 << 8);
+		ESP_LOGI("brink", "Step %d: Periodic read TSP 56 (MAX_VOL LB) - cycle %d", step_, slow_read_counter_);
+	  } else {
+		step_++;
+		should_send = false;
+	  }
+	  break;
+
+	case 8:  // MAX_VOL: TSP 57 HB
+	  if (slow_read_counter_ % 1200 == 1) {
+		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
+		ESP_LOGI("brink", "Step %d: Periodic read TSP 57 (MAX_VOL HB) - cycle %d", step_, slow_read_counter_);
+	  } else {
+		step_++;
+		should_send = false;
+	  }
+	  break;
+
+	case 9:  // MIN_VOL: TSP 58 LB
+	  if (slow_read_counter_ % 1200 == 2) {
+		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 58 << 8);
+		ESP_LOGI("brink", "Step %d: Periodic read TSP 58 (MIN_VOL LB) - cycle %d", step_, slow_read_counter_);
+	  } else {
+		step_++;
+		should_send = false;
+	  }
+	  break;
+
+	case 10:  // MIN_VOL: TSP 59 HB
+	  if (slow_read_counter_ % 1200 == 3) {
+		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 59 << 8);
+		ESP_LOGI("brink", "Step %d: Periodic read TSP 59 (MIN_VOL HB) - cycle %d", step_, slow_read_counter_);
+	  } else {
+		step_++;
+		should_send = false;
+	  }
+	  break;
+
 	// === EXPERIMENTAL - może nie działać ===
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 7:  // RPM Exhaust: OT85
+	case 11:  // RPM Exhaust: OT85
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Exhaust (OT ID 85)", step_);
 	  break;
 
-	case 8:  // RPM Supply: OT86
+	case 12:  // RPM Supply: OT86
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	case 9:  // T2 ID 81
+	case 13:  // T2 ID 81
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
 	  break;
 
-	case 10:  // T4 ID 83
+	case 14:  // T4 ID 83
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
 	  break;
@@ -456,56 +417,7 @@ inline void BrinkOpenTherm::start_next_request() {
 }
 
 inline void BrinkOpenTherm::handle_response() {
-  // Handle startup read responses
-  if (!startup_read_done_) {
-	if (last_response_status_ != OpenThermResponseStatus::SUCCESS) {
-	  ESP_LOGW("brink", "Startup step %d: Response status: %s", 
-			   startup_step_, ot->statusToString(last_response_status_));
-	  startup_step_++;
-	  async_state_ = AsyncState::IDLE;
-	  return;
-	}
-
-	unsigned long response = last_response_;
-
-	switch (startup_step_) {
-	  case 0:  // MaxVol LB
-		if (ot->isValidResponse(response)) {
-		  tsp_low_byte_ = (uint8_t)(response & 0xFF);
-		  ESP_LOGD("brink", "MaxVol LB: 0x%02X", tsp_low_byte_);
-		}
-		break;
-
-	  case 1:  // MaxVol HB
-		if (ot->isValidResponse(response) && max_vol_sensor) {
-		  uint16_t max_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		  ESP_LOGI("brink", "MaxVol: %d m³/h", max_vol);
-		  max_vol_sensor->publish_state(max_vol);
-		}
-		break;
-
-	  case 2:  // MinVol LB
-		if (ot->isValidResponse(response)) {
-		  tsp_low_byte_ = (uint8_t)(response & 0xFF);
-		  ESP_LOGD("brink", "MinVol LB: 0x%02X", tsp_low_byte_);
-		}
-		break;
-
-	  case 3:  // MinVol HB
-		if (ot->isValidResponse(response) && min_vol_sensor) {
-		  uint16_t min_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		  ESP_LOGI("brink", "MinVol: %d m³/h", min_vol);
-		  min_vol_sensor->publish_state(min_vol);
-		}
-		break;
-	}
-
-	startup_step_++;
-	async_state_ = AsyncState::IDLE;
-	return;
-  }
-
-  // Normal polling response handling
+  // Check response status
   if (last_response_status_ != OpenThermResponseStatus::SUCCESS) {
 	ESP_LOGW("brink", "Step %d: Response status: %s", 
 			 step_, ot->statusToString(last_response_status_));
@@ -589,9 +501,40 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
+	// === Periodic slow reads (every ~30 min) ===
+	case 7:  // MAX_VOL LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+		ESP_LOGI("brink", "MAX_VOL LB: 0x%02X", tsp_low_byte_);
+	  }
+	  break;
+
+	case 8:  // MAX_VOL HB
+	  if (ot->isValidResponse(response) && max_vol_sensor) {
+		uint16_t max_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "MAX_VOL: %d m³/h", max_vol);
+		max_vol_sensor->publish_state(max_vol);
+	  }
+	  break;
+
+	case 9:  // MIN_VOL LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+		ESP_LOGI("brink", "MIN_VOL LB: 0x%02X", tsp_low_byte_);
+	  }
+	  break;
+
+	case 10:  // MIN_VOL HB
+	  if (ot->isValidResponse(response) && min_vol_sensor) {
+		uint16_t min_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "MIN_VOL: %d m³/h", min_vol);
+		min_vol_sensor->publish_state(min_vol);
+	  }
+	  break;
+
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 7:  // RPM Exhaust
+	case 11:  // RPM Exhaust
 	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Exhaust: %d", rpm);
@@ -599,7 +542,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 8:  // RPM Supply
+	case 12:  // RPM Supply
 	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Supply: %d", rpm);
@@ -607,7 +550,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 9:  // T2
+	case 13:  // T2
 	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T2: %.2f°C", temp);
@@ -615,7 +558,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 10:  // T4
+	case 14:  // T4
 	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T4: %.2f°C", temp);
