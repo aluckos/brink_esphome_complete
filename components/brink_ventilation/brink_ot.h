@@ -461,7 +461,7 @@ inline void BrinkOpenTherm::start_next_request() {
 	  break;
   }
 
-  if (should_send && ot->sendRequestAsync(request)) {
+  if (should_send && ot->sendRequestAync(request)) {
 	async_state_ = AsyncState::WAITING;
 	ESP_LOGV("brink", "Request sent for step %d, waiting for response", step_);
   } else if (should_send) {
