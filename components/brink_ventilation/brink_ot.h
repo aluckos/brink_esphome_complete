@@ -310,24 +310,24 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 54 (Bypass)", step_);
 	  break;
 
-	case 7:  // MAX_VOL: TSP 56 LB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 56 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 56 (MAX_VOL LB)", step_);
+	case 7:  // MAX_VOL: TSP 48 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 48 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 48 (MAX_VOL LB)", step_);
 	  break;
 
-	case 8:  // MAX_VOL: TSP 57 HB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 57 (MAX_VOL HB)", step_);
+	case 8:  // MAX_VOL: TSP 49 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 49 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 49 (MAX_VOL HB)", step_);
 	  break;
 
-	case 9:  // MIN_VOL: TSP 58 LB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 58 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 58 (MIN_VOL LB)", step_);
+	case 9:  // MIN_VOL: TSP 50 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 50 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 50 (MIN_VOL LB)", step_);
 	  break;
 
-	case 10:  // MIN_VOL: TSP 59 HB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 59 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 59 (MIN_VOL HB)", step_);
+	case 10:  // MIN_VOL: TSP 51 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 51 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 51 (MIN_VOL HB)", step_);
 	  break;
 
 	// === EXPERIMENTAL - może nie działać ===
