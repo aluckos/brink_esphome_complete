@@ -326,25 +326,30 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 51 (MIN_VOL HB)", step_);
 	  break;
 
+	case 11:  // VentStatus: OT 70 (Fault indication + Ventilation mode)
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)70, 0);
+	  ESP_LOGD("brink", "Step %d: Reading OT 70 (VentStatus)", step_);
+	  break;
+
 	// === EXPERIMENTAL - może nie działać ===
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 11:  // RPM Exhaust: OT85
+	case 12:  // RPM Exhaust: OT85
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Exhaust (OT ID 85)", step_);
 	  break;
 
-	case 12:  // RPM Supply: OT86
+	case 13:  // RPM Supply: OT86
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	case 13:  // T2 ID 81
+	case 14:  // T2 ID 81
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
 	  break;
 
-	case 14:  // T4 ID 83
+	case 15:  // T4 ID 83
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
 	  break;
@@ -484,9 +489,23 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
+	case 11:  // VentStatus (OT70) - Fault indication + Ventilation mode
+	  if (ot->isValidResponse(response)) {
+		uint16_t status = ot->getUInt(response);
+		ESP_LOGD("brink", "VentStatus: 0x%04X (Fault=%d, VentMode=%d)", 
+				 status, status & 0x1, (status & 0x2) >> 1);
+		if (fault_indication_binary) {
+		  fault_indication_binary->publish_state(status & 0x1);
+		}
+		if (ventilation_mode_binary) {
+		  ventilation_mode_binary->publish_state((status & 0x2) >> 1);
+		}
+	  }
+	  break;
+
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 11:  // RPM Exhaust
+	case 12:  // RPM Exhaust
 	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Exhaust: %d", rpm);
@@ -567,99 +586,6 @@ inline void BrinkOpenTherm::handle_response() {
 	  if (ot->isValidResponse(response) && min_vol_sensor) {
 		uint16_t min_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
 		min_vol_sensor->publish_state(min_vol);
-	  }
-	  break;
-
-	case 26:  // VentStatus (OT70)
-	  if (ot->isValidResponse(response)) {
-		uint16_t status = ot->getUInt(response);
-		if (fault_indication_binary) {
-		  fault_indication_binary->publish_state(status & 0x1);
-		}
-		if (ventilation_mode_binary) {
-		  ventilation_mode_binary->publish_state((status & 0x2) >> 1);
-		}
-	  }
-	  break;
-
-	case 27:  // RPM Exhaust
-	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
-		uint16_t rpm = response & 0xFFFF;
-		if (rpm > 0 && rpm < 10000) {  // Sanity check
-		  rpm_exhaust_sensor->publish_state(rpm);
-		}
-	  }
-	  break;
-
-	case 28:  // RPM Supply
-	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
-		uint16_t rpm = response & 0xFFFF;
-		if (rpm > 0 && rpm < 10000) {
-		  rpm_supply_sensor->publish_state(rpm);
-		}
-	  }
-	  break;
-
-	case 29:  // InitStatus
-	  if (ot->isValidResponse(response) && init_status_binary) {
-		bool init = (response & 0xFF) == 1;
-		init_status_binary->publish_state(init);
-	  }
-	  break;
-
-	case 30:  // CurrentInputVol LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 31:  // CurrentInputVol HB
-	  if (ot->isValidResponse(response) && current_input_vol_sensor) {
-		uint16_t vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		current_input_vol_sensor->publish_state(vol);
-	  }
-	  break;
-
-	case 32:  // CurrentOutputVol LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 33:  // CurrentOutputVol HB
-	  if (ot->isValidResponse(response) && current_output_vol_sensor) {
-		uint16_t vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		current_output_vol_sensor->publish_state(vol);
-	  }
-	  break;
-
-	case 34:  // FrostStatus
-	  if (ot->isValidResponse(response) && frost_status_sensor) {
-		uint8_t frost = (uint8_t)(response & 0xFF);
-		frost_status_sensor->publish_state(frost);
-	  }
-	  break;
-
-	case 35:  // Temp2Atmo
-	  if (ot->isValidResponse(response) && temp2_atmo_sensor) {
-		uint8_t temp_raw = (uint8_t)(response & 0xFF);
-		int temp = (int)temp_raw - 100;
-		temp2_atmo_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 36:  // Temp2Indoors
-	  if (ot->isValidResponse(response) && temp2_indoors_sensor) {
-		uint8_t temp_raw = (uint8_t)(response & 0xFF);
-		int temp = (int)temp_raw - 100;
-		temp2_indoors_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 37:  // TempPostHeater
-	  if (ot->isValidResponse(response) && temp_postheater_sensor) {
-		uint8_t temp = (uint8_t)(response & 0xFF);
-		temp_postheater_sensor->publish_state(temp);
 	  }
 	  break;
   }
