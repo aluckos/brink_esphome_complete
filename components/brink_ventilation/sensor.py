@@ -36,8 +36,6 @@ TYPES = {
     "MSG_OPERATION": "msg_operation",
     "TEMP_ATMO": "temp_atmo",
     "TEMP_INDOORS": "temp_indoors",
-    "VOLTAGE_PARAM1": "voltage_param1",
-    "VOLTAGE_PARAM2": "voltage_param2",
     "FROST_STATUS": "frost_status",
     "TEMP2_ATMO": "temp2_atmo",
     "TEMP2_INDOORS": "temp2_indoors",
