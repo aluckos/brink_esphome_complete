@@ -214,7 +214,7 @@ class BrinkOpenTherm : public PollingComponent {
 
  protected:
   void start_next_request();
-  void handle_response();
+  void handle_response(unsigned long response);
 
   inline void publish_bypass_text_(uint8_t v) {
 	if (!bypass_status_text) return;
@@ -246,18 +246,11 @@ inline void BrinkOpenTherm::setup() {
 }
 
 inline void BrinkOpenTherm::loop() {
-  if (ot == nullptr) return;
+  if (ot == nullptr || async_state_ != AsyncState::IDLE) return;
 
-  // Non-blocking process - check OT state machine
-  ot->process();
-
-  // Check if we're waiting and response is ready
-  if (async_state_ == AsyncState::WAITING && ot->isReady()) {
-	last_response_ = ot->response;
-	last_response_status_ = ot->getLastResponseStatus();
-	async_state_ = AsyncState::PROCESSING;
-	handle_response();
-  }
+  // Process one request per loop iteration (quasi-async)
+  // This keeps ESPHome responsive by not blocking for all 38 steps at once
+  start_next_request();
 }
 
 inline void BrinkOpenTherm::update() {
@@ -275,7 +268,6 @@ inline void BrinkOpenTherm::update() {
   // Restart polling cycle
   step_ = 0;
   async_state_ = AsyncState::IDLE;
-  start_next_request();
 }
 
 inline void BrinkOpenTherm::start_next_request() {
@@ -284,6 +276,7 @@ inline void BrinkOpenTherm::start_next_request() {
   }
 
   unsigned long request = 0;
+  unsigned long response = 0;
   bool should_send = true;
 
   switch (step_) {
@@ -461,26 +454,27 @@ inline void BrinkOpenTherm::start_next_request() {
 	  break;
   }
 
-  if (should_send && ot->sendRequestAync(request)) {
-	async_state_ = AsyncState::WAITING;
-	ESP_LOGV("brink", "Request sent for step %d, waiting for response", step_);
-  } else if (should_send) {
-	ESP_LOGW("brink", "Failed to send request for step %d, OT not ready", step_);
+  if (should_send) {
+	// Send request synchronously (blocks ~100ms per request)
+	// But we only do ONE per loop() call, so ESPHome stays responsive
+	response = ot->sendRequest(request);
+
+	if (ot->isValidResponse(response)) {
+	  ESP_LOGV("brink", "Step %d: Response 0x%08lX", step_, response);
+	  handle_response(response);
+	} else {
+	  ESP_LOGW("brink", "Step %d: Invalid response 0x%08lX", step_, response);
+	}
+
+	// Move to next step
+	step_++;
+	if (step_ >= 38) {  // Total steps
+	  step_ = 0;
+	}
   }
 }
 
-inline void BrinkOpenTherm::handle_response() {
-  if (last_response_status_ != OpenThermResponseStatus::SUCCESS) {
-	ESP_LOGW("brink", "Step %d: Response status: %s", 
-			 step_, ot->statusToString(last_response_status_));
-	step_++;
-	async_state_ = AsyncState::IDLE;
-	start_next_request();
-	return;
-  }
-
-  unsigned long response = last_response_;
-
+inline void BrinkOpenTherm::handle_response(unsigned long response) {
   // Process response based on current step
   switch (step_) {
 	case 0:  // Write ventilation - no data to process
@@ -771,13 +765,6 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
   }
-
-  // Move to next step
-  step_++;
-  async_state_ = AsyncState::IDLE;
-
-  // Immediately try to start next request (non-blocking)
-  start_next_request();
 }
 
 // Control methods (same as sync version)
