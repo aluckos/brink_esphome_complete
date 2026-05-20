@@ -265,26 +265,8 @@ inline void BrinkOpenTherm::loop() {
 }
 
 inline void BrinkOpenTherm::update() {
-  // Increment slow read counter (for MAX_VOL/MIN_VOL periodic reads)
+  // Increment slow read counter (for MAX_VOL/MIN_VOL periodic reads every ~30 min)
   slow_read_counter_++;
-}
-
-  // Log startup status on first update() call
-  static bool first_update = true;
-  if (first_update) {
-	ESP_LOGI("brink", "First update() call - startup_read_done=%d, startup_step=%d", 
-			 startup_read_done_, startup_step_);
-	first_update = false;
-  }
-
-  // Status połączenia
-  if (status_text_sensor != nullptr) {
-	std::string current_status = "connected";
-	if (current_status != last_status_) {
-	  status_text_sensor->publish_state(current_status);
-	  last_status_ = current_status;
-	}
-  }
 }
 
 inline void BrinkOpenTherm::start_next_request() {
