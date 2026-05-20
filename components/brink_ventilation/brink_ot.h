@@ -258,6 +258,11 @@ inline void BrinkOpenTherm::loop() {
 	async_state_ = AsyncState::PROCESSING;
 	handle_response();
   }
+
+  // If idle and OT ready, try to send next request
+  if (async_state_ == AsyncState::IDLE && ot->isReady()) {
+	start_next_request();
+  }
 }
 
 inline void BrinkOpenTherm::update() {
@@ -475,7 +480,7 @@ inline void BrinkOpenTherm::handle_response() {
 			 step_, ot->statusToString(last_response_status_));
 	step_++;
 	async_state_ = AsyncState::IDLE;
-	start_next_request();
+	// DON'T call start_next_request() immediately - let loop() check isReady()
 	return;
   }
 
@@ -776,8 +781,7 @@ inline void BrinkOpenTherm::handle_response() {
   step_++;
   async_state_ = AsyncState::IDLE;
 
-  // Immediately try to start next request (non-blocking)
-  start_next_request();
+  // Let loop() handle next request when isReady()
 }
 
 // Control methods (same as sync version)
