@@ -329,25 +329,45 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading OT 70 (VentStatus)", step_);
 	  break;
 
+	case 12:  // CURRENT_INPUT_VOL: TSP 60 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 60 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 60 (CURRENT_INPUT_VOL LB)", step_);
+	  break;
+
+	case 13:  // CURRENT_INPUT_VOL: TSP 61 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 61 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 61 (CURRENT_INPUT_VOL HB)", step_);
+	  break;
+
+	case 14:  // CURRENT_OUTPUT_VOL: TSP 62 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 62 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 62 (CURRENT_OUTPUT_VOL LB)", step_);
+	  break;
+
+	case 15:  // CURRENT_OUTPUT_VOL: TSP 63 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 63 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 63 (CURRENT_OUTPUT_VOL HB)", step_);
+	  break;
+
 	// === EXPERIMENTAL - może nie działać ===
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 12:  // RPM Exhaust: OT85
+	case 16:  // RPM Exhaust: OT85
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Exhaust (OT ID 85)", step_);
 	  break;
 
-	case 13:  // RPM Supply: OT86
+	case 17:  // RPM Supply: OT86
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	case 14:  // T2 ID 81
+	case 18:  // T2 ID 81
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
 	  break;
 
-	case 15:  // T4 ID 83
+	case 19:  // T4 ID 83
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
 	  break;
@@ -501,9 +521,37 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
+	case 12:  // CURRENT_INPUT_VOL LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 13:  // CURRENT_INPUT_VOL HB
+	  if (ot->isValidResponse(response) && current_input_vol_sensor) {
+		uint16_t input_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "CURRENT_INPUT_VOL: %d m³/h", input_vol);
+		current_input_vol_sensor->publish_state(input_vol);
+	  }
+	  break;
+
+	case 14:  // CURRENT_OUTPUT_VOL LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 15:  // CURRENT_OUTPUT_VOL HB
+	  if (ot->isValidResponse(response) && current_output_vol_sensor) {
+		uint16_t output_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "CURRENT_OUTPUT_VOL: %d m³/h", output_vol);
+		current_output_vol_sensor->publish_state(output_vol);
+	  }
+	  break;
+
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 12:  // RPM Exhaust
+	case 16:  // RPM Exhaust
 	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Exhaust: %d", rpm);
@@ -511,7 +559,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 13:  // RPM Supply
+	case 17:  // RPM Supply
 	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Supply: %d", rpm);
@@ -519,7 +567,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 14:  // T2
+	case 18:  // T2
 	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T2: %.2f°C", temp);
@@ -527,7 +575,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 15:  // T4
+	case 19:  // T4
 	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T4: %.2f°C", temp);
