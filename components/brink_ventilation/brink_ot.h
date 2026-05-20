@@ -284,10 +284,12 @@ inline void BrinkOpenTherm::update() {
   }
 
   // DON'T restart if we're still in the middle of a polling cycle
-  // Only restart if IDLE and at the beginning (step 0) or if we've timed out
-  if (async_state_ == AsyncState::IDLE && step_ == 0) {
+  // Only restart if IDLE and at the beginning (step 0) AND startup is complete
+  if (startup_read_done_ && async_state_ == AsyncState::IDLE && step_ == 0) {
 	ESP_LOGV("brink", "update() - Starting new polling cycle");
 	start_next_request();
+  } else if (!startup_read_done_) {
+	ESP_LOGV("brink", "update() - Waiting for startup read to complete");
   } else {
 	ESP_LOGV("brink", "update() - Skipping, cycle in progress (step=%d, state=%d)", step_, (int)async_state_);
   }
@@ -326,6 +328,8 @@ inline void BrinkOpenTherm::start_startup_read() {
   if (ot->sendRequestAync(request)) {
     async_state_ = AsyncState::WAITING;
     ESP_LOGV("brink", "Startup request sent for step %d", startup_step_);
+  } else {
+    ESP_LOGW("brink", "Failed to send startup request for step %d, OT not ready", startup_step_);
   }
 }
 
