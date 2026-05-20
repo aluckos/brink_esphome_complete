@@ -283,6 +283,14 @@ inline void BrinkOpenTherm::loop() {
 inline void BrinkOpenTherm::update() {
   if (ot == nullptr) return;
 
+  // Log startup status on first update() call
+  static bool first_update = true;
+  if (first_update) {
+	ESP_LOGI("brink", "First update() call - startup_read_done=%d, startup_step=%d", 
+			 startup_read_done_, startup_step_);
+	first_update = false;
+  }
+
   // Status połączenia
   if (status_text_sensor != nullptr) {
 	std::string current_status = "connected";
