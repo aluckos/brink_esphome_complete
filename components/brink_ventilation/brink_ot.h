@@ -292,41 +292,46 @@ inline void BrinkOpenTherm::start_next_request() {
   bool should_send = true;
 
   switch (step_) {
-	case 0:  // WRITE: wentylacja ID 71
+	case 0:  // WRITE: wentylacja ID 71 (ALWAYS WORKING)
 	  request = ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID)71,
 								 (unsigned int)target_ventilation_);
 	  ESP_LOGD("brink", "Step %d: Writing ventilation setpoint %.0f", step_, target_ventilation_);
 	  break;
 
-	case 1:  // T1 ID 80
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)80, 0);
-	  ESP_LOGD("brink", "Step %d: Reading T1 (OT ID 80)", step_);
-	  break;
-
-	case 2:  // T2 ID 81
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
-	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
-	  break;
-
-	case 3:  // T3 ID 82
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)82, 0);
-	  ESP_LOGD("brink", "Step %d: Reading T3 (OT ID 82)", step_);
-	  break;
-
-	case 4:  // T4 ID 83
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
-	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
-	  break;
-
-	case 5:  // FLOW low: TSP 52 (LB)
+	case 1:  // FLOW low: TSP 52 (LB) - ALWAYS WORKING
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 52 << 8);
 	  ESP_LOGD("brink", "Step %d: Reading TSP 52 (Flow LB)", step_);
 	  break;
 
-	case 6:  // FLOW high: TSP 53 (HB) + MsgOperation
+	case 2:  // FLOW high: TSP 53 (HB) + MsgOperation - ALWAYS WORKING
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 53 << 8);
 	  ESP_LOGD("brink", "Step %d: Reading TSP 53 (Flow HB + MsgOp)", step_);
 	  break;
+
+	// === EXPERIMENTAL - może nie działać ===
+	#ifdef BRINK_ENABLE_EXPERIMENTAL
+
+	case 3:  // T1 ID 80
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)80, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T1 (OT ID 80)", step_);
+	  break;
+
+	case 4:  // T2 ID 81
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
+	  break;
+
+	case 5:  // T3 ID 82
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)82, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T3 (OT ID 82)", step_);
+	  break;
+
+	case 6:  // T4 ID 83
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
+	  break;
+
+	#endif  // BRINK_ENABLE_EXPERIMENTAL
 
 	case 7:  // Filter: TSP 13
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 13 << 8);
@@ -338,124 +343,17 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 54 (Bypass)", step_);
 	  break;
 
-	case 9:  // CPID low: TSP 64
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 64 << 8);
-	  break;
-
-	case 10:  // CPID high: TSP 65
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 65 << 8);
-	  break;
-
-	case 11:  // CPOD low: TSP 66
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 66 << 8);
-	  break;
-
-	case 12:  // CPOD high: TSP 67
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 67 << 8);
-	  break;
-
-	case 13:  // U1 low: TSP 38
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 38 << 8);
-	  break;
-
-	case 14:  // U1 high: TSP 39
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 39 << 8);
-	  break;
-
-	case 15:  // U2 low: TSP 40
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 40 << 8);
-	  break;
-
-	case 16:  // U2 high: TSP 41
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 41 << 8);
-	  break;
-
-	case 17:  // U3 low: TSP 42
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 42 << 8);
-	  break;
-
-	case 18:  // U3 high: TSP 43
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 43 << 8);
-	  break;
-
-	case 19:  // U4: TSP 44
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 44 << 8);
-	  break;
-
-	case 20:  // U5: TSP 45
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 45 << 8);
-	  break;
-
-	case 21:  // I1: TSP 46
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 46 << 8);
-	  break;
-
-	case 22:  // MaxVol low: TSP 48
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 48 << 8);
-	  break;
-
-	case 23:  // MaxVol high: TSP 49
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 49 << 8);
-	  break;
-
-	case 24:  // MinVol low: TSP 50
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 50 << 8);
-	  break;
-
-	case 25:  // MinVol high: TSP 51
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 51 << 8);
-	  break;
-
-	case 26:  // OT70: VentStatus
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)70, 0);
-	  break;
-
-	case 27:  // RPM Exhaust: OT85
+	case 9:  // RPM Exhaust: OT85
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
+	  ESP_LOGD("brink", "Step %d: Reading RPM Exhaust (OT ID 85)", step_);
 	  break;
 
-	case 28:  // RPM Supply: OT86
+	case 10:  // RPM Supply: OT86
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
+	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	case 29:  // TSP 57: InitStatus
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
-	  break;
-
-	// TSP 58/59 (VoltageParam1/2) - opcjonalne, wyłączone domyślnie
-	// case 30/31: ...
-
-	case 30:  // TSP 60: CurrentInputVol low
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 60 << 8);
-	  break;
-
-	case 31:  // TSP 61: CurrentInputVol high
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 61 << 8);
-	  break;
-
-	case 32:  // TSP 62: CurrentOutputVol low
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 62 << 8);
-	  break;
-
-	case 33:  // TSP 63: CurrentOutputVol high
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 63 << 8);
-	  break;
-
-	case 34:  // TSP 68: FrostStatus
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 68 << 8);
-	  break;
-
-	case 35:  // TSP 69: Temp2Atmo
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 69 << 8);
-	  break;
-
-	case 36:  // TSP 70: Temp2Indoors
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 70 << 8);
-	  break;
-
-	case 37:  // TSP 71: TempPostHeater
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 71 << 8);
-	  break;
+	#endif  // BRINK_ENABLE_EXPERIMENTAL
 
 	default:
 	  // Koniec cyklu, restart
@@ -492,45 +390,13 @@ inline void BrinkOpenTherm::handle_response() {
 	  ESP_LOGD("brink", "Ventilation setpoint written");
 	  break;
 
-	case 1:  // T1
-	  if (ot->isValidResponse(response) && t_supply_in_sensor) {
-		float temp = ot->getFloat(response);
-		ESP_LOGD("brink", "T1: %.2f°C", temp);
-		t_supply_in_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 2:  // T2
-	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
-		float temp = ot->getFloat(response);
-		ESP_LOGD("brink", "T2: %.2f°C", temp);
-		t_supply_out_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 3:  // T3
-	  if (ot->isValidResponse(response) && t_exhaust_in_sensor) {
-		float temp = ot->getFloat(response);
-		ESP_LOGD("brink", "T3: %.2f°C", temp);
-		t_exhaust_in_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 4:  // T4
-	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
-		float temp = ot->getFloat(response);
-		ESP_LOGD("brink", "T4: %.2f°C", temp);
-		t_exhaust_out_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 5:  // Flow LB
+	case 1:  // Flow LB (TSP 52)
 	  if (ot->isValidResponse(response)) {
 		tsp_low_byte_ = (uint8_t)(response & 0xFF);
 	  }
 	  break;
 
-	case 6:  // Flow HB + MsgOp
+	case 2:  // Flow HB + MsgOp (TSP 53)
 	  if (ot->isValidResponse(response)) {
 		uint8_t msg_op_code = (uint8_t)(response & 0xFF);
 
@@ -551,6 +417,42 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
+	#ifdef BRINK_ENABLE_EXPERIMENTAL
+
+	case 3:  // T1
+	  if (ot->isValidResponse(response) && t_supply_in_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T1: %.2f°C", temp);
+		t_supply_in_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 4:  // T2
+	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T2: %.2f°C", temp);
+		t_supply_out_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 5:  // T3
+	  if (ot->isValidResponse(response) && t_exhaust_in_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T3: %.2f°C", temp);
+		t_exhaust_in_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 6:  // T4
+	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T4: %.2f°C", temp);
+		t_exhaust_out_sensor->publish_state(temp);
+	  }
+	  break;
+
+	#endif  // BRINK_ENABLE_EXPERIMENTAL
+
 	case 7:  // Filter
 	  if (ot->isValidResponse(response) && filter_status_binary) {
 		bool dirty = (response & 0xFF) == 1;
@@ -568,68 +470,19 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 9:  // CPID LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	case 9:  // RPM Exhaust
+	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
+		uint16_t rpm = (uint16_t)(response & 0xFFFF);
+		ESP_LOGD("brink", "RPM Exhaust: %d", rpm);
+		rpm_exhaust_sensor->publish_state(rpm);
 	  }
 	  break;
 
-	case 10:  // CPID HB
-	  if (ot->isValidResponse(response) && cpid_sensor) {
-		uint16_t cpid = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		cpid_sensor->publish_state(cpid);
-	  }
-	  break;
-
-	case 11:  // CPOD LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 12:  // CPOD HB
-	  if (ot->isValidResponse(response) && cpod_sensor) {
-		uint16_t cpod = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		cpod_sensor->publish_state(cpod);
-	  }
-	  break;
-
-	case 13:  // U1 LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 14:  // U1 HB
-	  if (ot->isValidResponse(response) && u1_sensor) {
-		uint16_t u1 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		u1_sensor->publish_state(u1);
-	  }
-	  break;
-
-	case 15:  // U2 LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 16:  // U2 HB
-	  if (ot->isValidResponse(response) && u2_sensor) {
-		uint16_t u2 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		u2_sensor->publish_state(u2);
-	  }
-	  break;
-
-	case 17:  // U3 LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 18:  // U3 HB
-	  if (ot->isValidResponse(response) && u3_sensor) {
-		uint16_t u3 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		u3_sensor->publish_state(u3);
+	case 10:  // RPM Supply
+	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
+		uint16_t rpm = (uint16_t)(response & 0xFFFF);
+		ESP_LOGD("brink", "RPM Supply: %d", rpm);
+		rpm_supply_sensor->publish_state(rpm);
 	  }
 	  break;
 
