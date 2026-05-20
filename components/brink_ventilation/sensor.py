@@ -25,8 +25,6 @@ TYPES = {
     # U4/U5: progi bypassu
     "U4": "u4",
     "U5": "u5",
-    # I1: imbalance
-    "I1": "i1",
     # Bypass status
     "BYPASS_STATUS": "bypass_status",
     # RPM wentylatorów (OT 85/86)
