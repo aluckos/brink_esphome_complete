@@ -212,6 +212,7 @@ class BrinkOpenTherm : public PollingComponent {
   void update() override; // ← Tylko inicjuje requesty
 
  protected:
+  void start_startup_read();
   void start_next_request();
   void handle_response();
 
