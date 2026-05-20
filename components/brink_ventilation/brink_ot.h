@@ -511,7 +511,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 12:  // RPM Supply
+	case 13:  // RPM Supply
 	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Supply: %d", rpm);
@@ -519,7 +519,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 13:  // T2
+	case 14:  // T2
 	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T2: %.2f°C", temp);
@@ -527,7 +527,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 14:  // T4
+	case 15:  // T4
 	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T4: %.2f°C", temp);
@@ -536,56 +536,6 @@ inline void BrinkOpenTherm::handle_response() {
 	  break;
 
 	#endif  // BRINK_ENABLE_EXPERIMENTAL
-
-	case 19:  // U4
-	  if (ot->isValidResponse(response) && u4_sensor) {
-		uint8_t u4_raw = (uint8_t)(response & 0xFF);
-		float u4 = u4_raw / 2.0f;
-		u4_sensor->publish_state(u4);
-	  }
-	  break;
-
-	case 20:  // U5
-	  if (ot->isValidResponse(response) && u5_sensor) {
-		uint8_t u5_raw = (uint8_t)(response & 0xFF);
-		float u5 = u5_raw / 2.0f;
-		u5_sensor->publish_state(u5);
-	  }
-	  break;
-
-	case 21:  // I1
-	  if (ot->isValidResponse(response) && i1_sensor) {
-		uint8_t i1_raw = (uint8_t)(response & 0xFF);
-		int i1 = (int)i1_raw - 100;
-		i1_sensor->publish_state(i1);
-	  }
-	  break;
-
-	case 22:  // MaxVol LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 23:  // MaxVol HB
-	  if (ot->isValidResponse(response) && max_vol_sensor) {
-		uint16_t max_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		max_vol_sensor->publish_state(max_vol);
-	  }
-	  break;
-
-	case 24:  // MinVol LB
-	  if (ot->isValidResponse(response)) {
-		tsp_low_byte_ = (uint8_t)(response & 0xFF);
-	  }
-	  break;
-
-	case 25:  // MinVol HB
-	  if (ot->isValidResponse(response) && min_vol_sensor) {
-		uint16_t min_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
-		min_vol_sensor->publish_state(min_vol);
-	  }
-	  break;
   }
 
   // Move to next step
