@@ -308,22 +308,22 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 53 (Flow HB + MsgOp)", step_);
 	  break;
 
-	// === EXPERIMENTAL - może nie działać ===
-	#ifdef BRINK_ENABLE_EXPERIMENTAL
-
-	case 3:  // T1 ID 80
+	case 3:  // T1 ID 80 - ALWAYS WORKING
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)80, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T1 (OT ID 80)", step_);
 	  break;
 
-	case 4:  // T2 ID 81
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
-	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
-	  break;
-
-	case 5:  // T3 ID 82
+	case 4:  // T3 ID 82 - ALWAYS WORKING
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)82, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T3 (OT ID 82)", step_);
+	  break;
+
+	// === EXPERIMENTAL - może nie działać ===
+	#ifdef BRINK_ENABLE_EXPERIMENTAL
+
+	case 5:  // T2 ID 81
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
 	  break;
 
 	case 6:  // T4 ID 83
@@ -415,9 +415,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	#ifdef BRINK_ENABLE_EXPERIMENTAL
-
-	case 3:  // T1
+	case 3:  // T1 - ALWAYS WORKING
 	  if (ot->isValidResponse(response) && t_supply_in_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T1: %.2f°C", temp);
@@ -425,19 +423,21 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 4:  // T2
-	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
-		float temp = ot->getFloat(response);
-		ESP_LOGD("brink", "T2: %.2f°C", temp);
-		t_supply_out_sensor->publish_state(temp);
-	  }
-	  break;
-
-	case 5:  // T3
+	case 4:  // T3 - ALWAYS WORKING
 	  if (ot->isValidResponse(response) && t_exhaust_in_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T3: %.2f°C", temp);
 		t_exhaust_in_sensor->publish_state(temp);
+	  }
+	  break;
+
+	#ifdef BRINK_ENABLE_EXPERIMENTAL
+
+	case 5:  // T2
+	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T2: %.2f°C", temp);
+		t_supply_out_sensor->publish_state(temp);
 	  }
 	  break;
 
