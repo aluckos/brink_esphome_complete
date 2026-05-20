@@ -18,9 +18,6 @@ TYPES = {
     "T_EXHAUST_OUT": "t_exhaust_out",
     # Przepływ
     "CURRENT_FLOW": "current_flow",
-    # Ciśnienia CPID/CPOD
-    "CPID": "cpid",
-    "CPOD": "cpod",
     # U1-U3: kroki wydatku
     "U1": "u1",
     "U2": "u2",
