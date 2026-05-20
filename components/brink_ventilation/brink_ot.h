@@ -353,8 +353,6 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	#endif  // BRINK_ENABLE_EXPERIMENTAL
-
 	default:
 	  // Koniec cyklu, restart
 	  step_ = 0;
