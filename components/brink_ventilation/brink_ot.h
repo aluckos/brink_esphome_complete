@@ -6,28 +6,29 @@
 namespace esphome {
 namespace brink_ventilation {
 
+// Forward declarations
+class BrinkOpenTherm;
+
 // Helper: Dekodowanie kodu MsgOperation (C0-C12)
 static const char* decode_msg_operation(uint8_t code) {
   switch (code) {
-    case 0x00: return "OK: No errors";  // 0x00 oznacza brak błędów
-    case 0xC0: return "C0: None";
-    case 0xC1: return "C1: Filter dirty";
-    case 0xC2: return "C2: Max ventilation";
-    case 0xC3: return "C3: Absence ventilation";
-    case 0xC4: return "C4: Supply air fan error";
-    case 0xC5: return "C5: Exhaust air fan error";
-    case 0xC6: return "C6: Frost protection mode";
-    case 0xC7: return "C7: Preheater error";
-    case 0xC8: return "C8: Bypass stuck open";
-    case 0xC9: return "C9: Bypass stuck closed";
-    case 0xCA: return "C10: T1 sensor error";
-    case 0xCB: return "C11: T2 sensor error";
-    case 0xCC: return "C12: T3 sensor error";
-    default:   return "Unknown";
+	case 0x00: return "OK: No errors";
+	case 0xC0: return "C0: None";
+	case 0xC1: return "C1: Filter dirty";
+	case 0xC2: return "C2: Max ventilation";
+	case 0xC3: return "C3: Absence ventilation";
+	case 0xC4: return "C4: Supply air fan error";
+	case 0xC5: return "C5: Exhaust air fan error";
+	case 0xC6: return "C6: Frost protection mode";
+	case 0xC7: return "C7: Preheater error";
+	case 0xC8: return "C8: Bypass stuck open";
+	case 0xC9: return "C9: Bypass stuck closed";
+	case 0xCA: return "C10: T1 sensor error";
+	case 0xCB: return "C11: T2 sensor error";
+	case 0xCC: return "C12: T3 sensor error";
+	default:   return "Unknown";
   }
 }
-
-class BrinkOpenTherm;
 
 // Number: główny suwak wentylacji (OT ID 71)
 class BrinkNumber : public number::Number {
@@ -77,6 +78,13 @@ class BrinkPresetSelect : public select::Select, public Component {
   void control(const std::string &value) override;
 };
 
+// Async State Machine
+enum class AsyncState {
+  IDLE,           // Ready to send next request
+  WAITING,        // Waiting for response
+  PROCESSING      // Processing received response
+};
+
 class BrinkOpenTherm : public PollingComponent {
  public:
   OpenTherm *ot{nullptr};
@@ -88,111 +96,96 @@ class BrinkOpenTherm : public PollingComponent {
   // pomocnicze do 2-bajtowych TSP
   uint8_t tsp_low_byte_{0};
 
-  // status tracking - publikuj tylko przy zmianie
+  // status tracking
   std::string last_status_{""};
 
-  // --- encje ESPHome (wsk. ustawiane z pythonowych platform) ---
-  // Temperatury (OT IDs 80-83)
-  sensor::Sensor *t_supply_in_sensor{nullptr};    // ID 80
-  sensor::Sensor *t_supply_out_sensor{nullptr};   // ID 81
-  sensor::Sensor *t_exhaust_in_sensor{nullptr};   // ID 82
-  sensor::Sensor *t_exhaust_out_sensor{nullptr};  // ID 83
+  // Async state machine
+  AsyncState async_state_{AsyncState::IDLE};
+  uint8_t step_{0};
+  unsigned long last_response_{0};
+  OpenThermResponseStatus last_response_status_{OpenThermResponseStatus::NONE};
 
-  // przepływ (u Ciebie: TSP 52/53 jako 2 bajty)
+  // --- encje ESPHome ---
+  sensor::Sensor *t_supply_in_sensor{nullptr};
+  sensor::Sensor *t_supply_out_sensor{nullptr};
+  sensor::Sensor *t_exhaust_in_sensor{nullptr};
+  sensor::Sensor *t_exhaust_out_sensor{nullptr};
+
   sensor::Sensor *current_flow_sensor{nullptr};
+  sensor::Sensor *bypass_status_sensor{nullptr};
+  text_sensor::TextSensor *bypass_status_text{nullptr};
 
-  // Dodatkowe TSP 2-bajtowe
-  sensor::Sensor *cpid_sensor{nullptr};  // 64/65
-  sensor::Sensor *cpod_sensor{nullptr};  // 66/67
-
-  sensor::Sensor *u1_sensor{nullptr};  // 0/1
-  sensor::Sensor *u2_sensor{nullptr};  // 2/3
-  sensor::Sensor *u3_sensor{nullptr};  // 4/5
-
-  // Dodatkowe TSP 1-bajtowe
-  sensor::Sensor *u4_sensor{nullptr};  // 6 (wartość /2 => °C)
-  sensor::Sensor *u5_sensor{nullptr};  // 7 (wartość /2 => °C)
-  sensor::Sensor *i1_sensor{nullptr};  // 9 (wartość -100)
-
-  // Bypass status jako tekst i jako liczba
-  sensor::Sensor *bypass_status_sensor{nullptr};        // surowy 0/1/2
-  text_sensor::TextSensor *bypass_status_text{nullptr}; // opis
-
-  // Filtr + status komunikacji
   binary_sensor::BinarySensor *filter_status_binary{nullptr};
   text_sensor::TextSensor *status_text_sensor{nullptr};
 
-  // OT ID 70 (VentStatus) - fault indication i ventilation mode
-  binary_sensor::BinarySensor *fault_indication_binary{nullptr};    // bit 0
-  binary_sensor::BinarySensor *ventilation_mode_binary{nullptr};    // bit 1
+  binary_sensor::BinarySensor *fault_indication_binary{nullptr};
+  binary_sensor::BinarySensor *ventilation_mode_binary{nullptr};
 
-  // RPM wentylatorów (OT IDs 85-86)
-  sensor::Sensor *rpm_exhaust_sensor{nullptr};  // ID 85
-  sensor::Sensor *rpm_supply_sensor{nullptr};   // ID 86
+  sensor::Sensor *cpid_sensor{nullptr};
+  sensor::Sensor *cpod_sensor{nullptr};
 
-  // Nowe TSP 1-bajtowe
-  sensor::Sensor *msg_operation_sensor{nullptr};      // TSP 53 (C0-C12)
-  text_sensor::TextSensor *msg_operation_text{nullptr}; // TSP 53 decoded
-  sensor::Sensor *temp_atmo_sensor{nullptr};          // TSP 55 (-100)
-  sensor::Sensor *temp_indoors_sensor{nullptr};       // TSP 56 (-100)
-  binary_sensor::BinarySensor *init_status_binary{nullptr}; // TSP 57 (0/1)
-  sensor::Sensor *voltage_param1_sensor{nullptr};     // TSP 58 (0-10V)
-  sensor::Sensor *voltage_param2_sensor{nullptr};     // TSP 59 (0-10V)
-  sensor::Sensor *frost_status_sensor{nullptr};       // TSP 68 (0-5)
-  sensor::Sensor *temp2_atmo_sensor{nullptr};         // TSP 69 (-100)
-  sensor::Sensor *temp2_indoors_sensor{nullptr};      // TSP 70 (-100)
-  sensor::Sensor *temp_postheater_sensor{nullptr};    // TSP 71
+  sensor::Sensor *u1_sensor{nullptr};
+  sensor::Sensor *u2_sensor{nullptr};
+  sensor::Sensor *u3_sensor{nullptr};
+  sensor::Sensor *u4_sensor{nullptr};
+  sensor::Sensor *u5_sensor{nullptr};
+  sensor::Sensor *i1_sensor{nullptr};
 
-  // Nowe TSP 2-bajtowe
-  sensor::Sensor *max_vol_sensor{nullptr};            // TSP 48/49
-  sensor::Sensor *min_vol_sensor{nullptr};            // TSP 50/51
-  sensor::Sensor *current_input_vol_sensor{nullptr};  // TSP 60/61
-  sensor::Sensor *current_output_vol_sensor{nullptr}; // TSP 62/63
+  sensor::Sensor *rpm_exhaust_sensor{nullptr};
+  sensor::Sensor *rpm_supply_sensor{nullptr};
 
-  // Numbers dla U1/U2/U3 + trigger select
+  sensor::Sensor *msg_operation_sensor{nullptr};
+  text_sensor::TextSensor *msg_operation_text{nullptr};
+
+  sensor::Sensor *temp_atmo_sensor{nullptr};
+  sensor::Sensor *temp_indoors_sensor{nullptr};
+  binary_sensor::BinarySensor *init_status_binary{nullptr};
+  sensor::Sensor *voltage_param1_sensor{nullptr};
+  sensor::Sensor *voltage_param2_sensor{nullptr};
+  sensor::Sensor *frost_status_sensor{nullptr};
+  sensor::Sensor *temp2_atmo_sensor{nullptr};
+  sensor::Sensor *temp2_indoors_sensor{nullptr};
+  sensor::Sensor *temp_postheater_sensor{nullptr};
+
+  sensor::Sensor *max_vol_sensor{nullptr};
+  sensor::Sensor *min_vol_sensor{nullptr};
+  sensor::Sensor *current_input_vol_sensor{nullptr};
+  sensor::Sensor *current_output_vol_sensor{nullptr};
+
   number::Number *u1_number{nullptr};
   number::Number *u2_number{nullptr};
   number::Number *u3_number{nullptr};
-  select::Select *ventilation_preset_select{nullptr}; // U1/U2/U3 select
-  select::Select *bypass_select{nullptr}; // Bypass control
+  select::Select *ventilation_preset_select{nullptr};
+  select::Select *bypass_select{nullptr};
 
   void set_pins(int in, int out) { pin_in = in; pin_out = out; }
 
-  // Metody do sterowania bypass
   void set_bypass_mode(const std::string &mode);
   void apply_preset(const std::string &preset);
   void write_u_preset(uint8_t preset_num, uint16_t value);
 
-  // --- settery sensorów (muszą odpowiadać nazwom z sensor.py) ---
+  // Settery (same as sync version)
   void set_t_supply_in_sensor(sensor::Sensor *s) { t_supply_in_sensor = s; }
   void set_t_supply_out_sensor(sensor::Sensor *s) { t_supply_out_sensor = s; }
   void set_t_exhaust_in_sensor(sensor::Sensor *s) { t_exhaust_in_sensor = s; }
   void set_t_exhaust_out_sensor(sensor::Sensor *s) { t_exhaust_out_sensor = s; }
-
   void set_current_flow_sensor(sensor::Sensor *s) { current_flow_sensor = s; }
-
   void set_cpid_sensor(sensor::Sensor *s) { cpid_sensor = s; }
   void set_cpod_sensor(sensor::Sensor *s) { cpod_sensor = s; }
-
   void set_u1_sensor(sensor::Sensor *s) { u1_sensor = s; }
   void set_u2_sensor(sensor::Sensor *s) { u2_sensor = s; }
   void set_u3_sensor(sensor::Sensor *s) { u3_sensor = s; }
   void set_u4_sensor(sensor::Sensor *s) { u4_sensor = s; }
   void set_u5_sensor(sensor::Sensor *s) { u5_sensor = s; }
   void set_i1_sensor(sensor::Sensor *s) { i1_sensor = s; }
-
   void set_bypass_status_sensor(sensor::Sensor *s) { bypass_status_sensor = s; }
   void set_bypass_status_text(text_sensor::TextSensor *s) { bypass_status_text = s; }
-
   void set_filter_status_binary(binary_sensor::BinarySensor *s) { filter_status_binary = s; }
   void set_status_text_sensor(text_sensor::TextSensor *s) { status_text_sensor = s; }
-
   void set_fault_indication_binary(binary_sensor::BinarySensor *s) { fault_indication_binary = s; }
   void set_ventilation_mode_binary(binary_sensor::BinarySensor *s) { ventilation_mode_binary = s; }
-
   void set_rpm_exhaust_sensor(sensor::Sensor *s) { rpm_exhaust_sensor = s; }
   void set_rpm_supply_sensor(sensor::Sensor *s) { rpm_supply_sensor = s; }
-
   void set_msg_operation_sensor(sensor::Sensor *s) { msg_operation_sensor = s; }
   void set_temp_atmo_sensor(sensor::Sensor *s) { temp_atmo_sensor = s; }
   void set_temp_indoors_sensor(sensor::Sensor *s) { temp_indoors_sensor = s; }
@@ -203,46 +196,34 @@ class BrinkOpenTherm : public PollingComponent {
   void set_temp2_atmo_sensor(sensor::Sensor *s) { temp2_atmo_sensor = s; }
   void set_temp2_indoors_sensor(sensor::Sensor *s) { temp2_indoors_sensor = s; }
   void set_temp_postheater_sensor(sensor::Sensor *s) { temp_postheater_sensor = s; }
-
   void set_max_vol_sensor(sensor::Sensor *s) { max_vol_sensor = s; }
   void set_min_vol_sensor(sensor::Sensor *s) { min_vol_sensor = s; }
   void set_current_input_vol_sensor(sensor::Sensor *s) { current_input_vol_sensor = s; }
   void set_current_output_vol_sensor(sensor::Sensor *s) { current_output_vol_sensor = s; }
-
   void set_msg_operation_text(text_sensor::TextSensor *s) { msg_operation_text = s; }
-
   void set_u1_number(number::Number *n) { u1_number = n; }
   void set_u2_number(number::Number *n) { u2_number = n; }
   void set_u3_number(number::Number *n) { u3_number = n; }
   void set_ventilation_preset_select(select::Select *s) { ventilation_preset_select = s; }
   void set_bypass_select(select::Select *s) { bypass_select = s; }
-
   void set_ventilation_number(BrinkNumber *n) { n->set_parent(this); }
 
   void setup() override;
-  void update() override;
+  void loop() override;   // ← NEW: Non-blocking OT processing
+  void update() override; // ← Tylko inicjuje requesty
 
  protected:
-  // Prosta „kolejka” polling: odpytywanie po jednym elemencie na update()
-  // żeby nie zajechać OT i zachować cykliczną komunikację.
-  uint8_t step_{0};
+  void start_next_request();
+  void handle_response();
 
   inline void publish_bypass_text_(uint8_t v) {
-    if (!bypass_status_text) return;
-    switch (v) {
-      case 0:
-        bypass_status_text->publish_state("closed");
-        break;
-      case 1:
-        bypass_status_text->publish_state("automatic");
-        break;
-      case 2:
-        bypass_status_text->publish_state("inlet_minimum");
-        break;
-      default:
-        bypass_status_text->publish_state("unknown");
-        break;
-    }
+	if (!bypass_status_text) return;
+	switch (v) {
+	  case 0: bypass_status_text->publish_state("closed"); break;
+	  case 1: bypass_status_text->publish_state("automatic"); break;
+	  case 2: bypass_status_text->publish_state("inlet_minimum"); break;
+	  default: bypass_status_text->publish_state("unknown"); break;
+	}
   }
 };
 
@@ -252,7 +233,7 @@ static BrinkOpenTherm *global_brink_ot = nullptr;
 
 static void IRAM_ATTR handleInterrupt() {
   if (global_brink_ot != nullptr && global_brink_ot->ot != nullptr) {
-    global_brink_ot->ot->handleInterrupt();
+	global_brink_ot->ot->handleInterrupt();
   }
 }
 
@@ -260,567 +241,637 @@ inline void BrinkOpenTherm::setup() {
   global_brink_ot = this;
   ot = new OpenTherm(pin_in, pin_out);
   ot->begin(handleInterrupt);
+
+  ESP_LOGI("brink", "Async OpenTherm initialized on pins IN=%d, OUT=%d", pin_in, pin_out);
 }
 
-inline void BrinkNumber::control(float value) {
-  this->publish_state(value);
-  if (this->parent_ != nullptr) {
-    this->parent_->target_ventilation_ = value;
+inline void BrinkOpenTherm::loop() {
+  if (ot == nullptr) return;
+
+  // Non-blocking process - check OT state machine
+  ot->process();
+
+  // Check if we're waiting and response is ready
+  if (async_state_ == AsyncState::WAITING && ot->isReady()) {
+	last_response_ = ot->response;
+	last_response_status_ = ot->getLastResponseStatus();
+	async_state_ = AsyncState::PROCESSING;
+	handle_response();
   }
 }
 
 inline void BrinkOpenTherm::update() {
   if (ot == nullptr) return;
 
-  // Nie używamy OT ID 0 (status boiler) - to jest dla kotłów, nie dla central wentylacyjnych!
-  // Ventilation status to OT ID 70 (VentStatus) i jest odczytywany w polling loop.
-
-  // Publikuj status tylko jeśli się zmienił
+  // Status połączenia
   if (status_text_sensor != nullptr) {
-    std::string current_status = "connected";
-    if (current_status != last_status_) {
-      status_text_sensor->publish_state(current_status);
-      last_status_ = current_status;
-    }
+	std::string current_status = "connected";
+	if (current_status != last_status_) {
+	  status_text_sensor->publish_state(current_status);
+	  last_status_ = current_status;
+	}
   }
 
-  unsigned long response = 0;
+  // Restart polling cycle
+  step_ = 0;
+  async_state_ = AsyncState::IDLE;
+  start_next_request();
+}
 
-  // krokami odczytujemy kolejne parametry
+inline void BrinkOpenTherm::start_next_request() {
+  if (async_state_ != AsyncState::IDLE || !ot->isReady()) {
+	return; // Busy or not ready
+  }
+
+  unsigned long request = 0;
+  bool should_send = true;
+
   switch (step_) {
-    case 0:  // WRITE: wentylacja ID 71
-      ot->sendRequest(ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID) 71,
-                                       (unsigned int) target_ventilation_));
-      step_++;
-      break;
+	case 0:  // WRITE: wentylacja ID 71
+	  request = ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID)71,
+								 (unsigned int)target_ventilation_);
+	  ESP_LOGD("brink", "Step %d: Writing ventilation setpoint %.0f", step_, target_ventilation_);
+	  break;
 
-    case 1:  // T1 ID 80
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 80, 0));
-      ESP_LOGD("brink", "OT ID 80 response: 0x%08lX", response);
-      if (ot->isValidResponse(response) && t_supply_in_sensor) {
-        float temp = ot->getFloat(response);
-        ESP_LOGD("brink", "T1 (supply_in): %.2f°C", temp);
-        t_supply_in_sensor->publish_state(temp);
-      } else {
-        ESP_LOGW("brink", "No response for OT ID 80 (T1)");
-      }
-      step_++;
-      break;
+	case 1:  // T1 ID 80
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)80, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T1 (OT ID 80)", step_);
+	  break;
 
-    case 2:  // T2 ID 81
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 81, 0));
-      ESP_LOGD("brink", "OT ID 81 response: 0x%08lX", response);
-      if (ot->isValidResponse(response) && t_supply_out_sensor) {
-        float temp = ot->getFloat(response);
-        ESP_LOGD("brink", "T2 (supply_out): %.2f°C", temp);
-        t_supply_out_sensor->publish_state(temp);
-      } else {
-        ESP_LOGW("brink", "No response for OT ID 81 (T2)");
-      }
-      step_++;
-      break;
+	case 2:  // T2 ID 81
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
+	  break;
 
-    case 3:  // T3 ID 82
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 82, 0));
-      ESP_LOGD("brink", "OT ID 82 response: 0x%08lX", response);
-      if (ot->isValidResponse(response) && t_exhaust_in_sensor) {
-        float temp = ot->getFloat(response);
-        ESP_LOGD("brink", "T3 (exhaust_in): %.2f°C", temp);
-        t_exhaust_in_sensor->publish_state(temp);
-      } else {
-        ESP_LOGW("brink", "No response for OT ID 82 (T3)");
-      }
-      step_++;
-      break;
+	case 3:  // T3 ID 82
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)82, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T3 (OT ID 82)", step_);
+	  break;
 
-    case 4:  // T4 ID 83
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 83, 0));
-      ESP_LOGD("brink", "OT ID 83 response: 0x%08lX", response);
-      if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
-        float temp = ot->getFloat(response);
-        ESP_LOGD("brink", "T4 (exhaust_out): %.2f°C", temp);
-        t_exhaust_out_sensor->publish_state(temp);
-      } else {
-        ESP_LOGW("brink", "No response for OT ID 83 (T4)");
-      }
-      step_++;
-      break;
+	case 4:  // T4 ID 83
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
+	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
+	  break;
 
-    // --- TSP 2-bajtowe (two-step: low, high) ---
-    case 5:  // FLOW low: TSP 52 (LB)
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 52 << 8));
-      ESP_LOGD("brink", "TSP 52 response: 0x%08lX", response);
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 5:  // FLOW low: TSP 52 (LB)
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 52 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 52 (Flow LB)", step_);
+	  break;
 
-    case 6:  // FLOW high: TSP 53 (HB) + MsgOperation
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 53 << 8));
-      ESP_LOGD("brink", "TSP 53 response: 0x%08lX", response);
-      if (ot->isValidResponse(response)) {
-        uint8_t msg_op_code = (uint8_t) (response & 0xFF);
-        // Flow
-        if (current_flow_sensor) {
-          uint16_t flow = ((uint16_t) msg_op_code << 8) | tsp_low_byte_;
-          ESP_LOGD("brink", "Current flow: %d m³/h", flow);
-          current_flow_sensor->publish_state(flow);
-        }
-        // MsgOperation sensor (raw code)
-        if (msg_operation_sensor) {
-          msg_operation_sensor->publish_state(msg_op_code);
-        }
-        // MsgOperation text (decoded)
-        if (msg_operation_text) {
-          const char* desc = decode_msg_operation(msg_op_code);
-          ESP_LOGD("brink", "MsgOperation: 0x%02X = %s", msg_op_code, desc);
-          msg_operation_text->publish_state(desc);
-        }
-      }
-      step_++;
-      break;
+	case 6:  // FLOW high: TSP 53 (HB) + MsgOperation
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 53 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 53 (Flow HB + MsgOp)", step_);
+	  break;
 
-    case 7:  // Filter: TSP 13
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 13 << 8));
-      ESP_LOGD("brink", "TSP 13 (filter) response: 0x%08lX", response);
-      if (response && filter_status_binary) {
-        bool dirty = (response & 0xFF) == 1;
-        ESP_LOGD("brink", "Filter dirty: %s", dirty ? "YES" : "NO");
-        filter_status_binary->publish_state(dirty);
-      }
-      step_++;
-      break;
+	case 7:  // Filter: TSP 13
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 13 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 13 (Filter)", step_);
+	  break;
 
-    // --- bypass status: TSP 54 (not 55!) ---
-    case 8:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 54 << 8));
-      ESP_LOGD("brink", "TSP 54 (bypass) response: 0x%08lX", response);
-      if (ot->isValidResponse(response)) {
-        uint8_t v = (uint8_t) (response & 0xFF);
-        ESP_LOGD("brink", "Bypass status raw: %d (0=closed, 1=auto, 2=inlet_min)", v);
-        if (bypass_status_sensor) bypass_status_sensor->publish_state(v);
-        publish_bypass_text_(v);
-      }
-      step_++;
-      break;
+	case 8:  // Bypass: TSP 54
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 54 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 54 (Bypass)", step_);
+	  break;
 
-    // --- CPID: 64/65 (2 bytes) ---
-    case 9:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 64 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 9:  // CPID low: TSP 64
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 64 << 8);
+	  break;
 
-    case 10:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 65 << 8));
-      if (response && cpid_sensor) cpid_sensor->publish_state(((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_);
-      step_++;
-      break;
+	case 10:  // CPID high: TSP 65
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 65 << 8);
+	  break;
 
-    // --- CPOD: 66/67 (2 bytes) ---
-    case 11:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 66 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 11:  // CPOD low: TSP 66
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 66 << 8);
+	  break;
 
-    case 12:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 67 << 8));
-      if (response && cpod_sensor) cpod_sensor->publish_state(((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_);
-      step_++;
-      break;
+	case 12:  // CPOD high: TSP 67
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 67 << 8);
+	  break;
 
-    // --- U1: 0/1 (2 bytes) ---
-    case 13:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 0 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 13:  // U1 low: TSP 38
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 38 << 8);
+	  break;
 
-    case 14:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 1 << 8));
-      if (response && u1_sensor) u1_sensor->publish_state(((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_);
-      step_++;
-      break;
+	case 14:  // U1 high: TSP 39
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 39 << 8);
+	  break;
 
-    // --- U2: 2/3 ---
-    case 15:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 2 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 15:  // U2 low: TSP 40
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 40 << 8);
+	  break;
 
-    case 16:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 3 << 8));
-      if (response && u2_sensor) u2_sensor->publish_state(((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_);
-      step_++;
-      break;
+	case 16:  // U2 high: TSP 41
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 41 << 8);
+	  break;
 
-    // --- U3: 4/5 ---
-    case 17:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 4 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 17:  // U3 low: TSP 42
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 42 << 8);
+	  break;
 
-    case 18:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 5 << 8));
-      if (response && u3_sensor) u3_sensor->publish_state(((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_);
-      step_++;
-      break;
+	case 18:  // U3 high: TSP 43
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 43 << 8);
+	  break;
 
-    // --- U4 (temp threshold atmo): index 6, value/2 => °C ---
-    case 19:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 6 << 8));
-      if (response && u4_sensor) u4_sensor->publish_state(((uint8_t) (response & 0xFF)) / 2.0f);
-      step_++;
-      break;
+	case 19:  // U4: TSP 44
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 44 << 8);
+	  break;
 
-    // --- U5 (temp threshold indoor): index 7, value/2 => °C ---
-    case 20:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 7 << 8));
-      if (response && u5_sensor) u5_sensor->publish_state(((uint8_t) (response & 0xFF)) / 2.0f);
-      step_++;
-      break;
+	case 20:  // U5: TSP 45
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 45 << 8);
+	  break;
 
-    // --- I1 (imbalance): index 9, value-100 ---
-    case 21:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 9 << 8));
-      if (response && i1_sensor) i1_sensor->publish_state(((int) ((uint8_t) (response & 0xFF))) - 100);
-      step_++;
-      break;
+	case 21:  // I1: TSP 46
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 46 << 8);
+	  break;
 
-    // --- OT ID 70 (VentStatus): fault indication i ventilation mode ---
-    case 22:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 70, 0));
-      ESP_LOGD("brink", "OT ID 70 (VentStatus) response: 0x%08lX", response);
-      if (ot->isValidResponse(response)) {
-        uint16_t status = (response >> 8) & 0xFFFF;  // Low word zawiera status flags
-        // Bit 0: Fault indication (0=OK, 1=Fault)
-        if (fault_indication_binary) {
-          bool fault = (status & 0x01) != 0;
-          ESP_LOGD("brink", "Fault indication: %s", fault ? "YES" : "NO");
-          fault_indication_binary->publish_state(fault);
-        }
-        // Bit 1: Ventilation mode (0=supply only, 1=supply+exhaust)
-        if (ventilation_mode_binary) {
-          bool mode = (status & 0x02) != 0;
-          ESP_LOGD("brink", "Ventilation mode: %s", mode ? "supply+exhaust" : "supply only");
-          ventilation_mode_binary->publish_state(mode);
-        }
-      }
-      step_++;  // kontynuuj do następnych case
-      break;
+	case 22:  // MaxVol low: TSP 48
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 48 << 8);
+	  break;
 
-    // --- RPM wentylatorów ---
-    case 23:  // Exhaust RPM (OT ID 85)
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 85, 0));
-      ESP_LOGD("brink", "OT ID 85 (RPM exhaust) response: 0x%08lX", response);
-      if (response && rpm_exhaust_sensor) {
-        uint16_t rpm = response & 0xFFFF;  // Dolne 16 bitów to wartość RPM
-        ESP_LOGD("brink", "Exhaust fan RPM: %d", rpm);
-        rpm_exhaust_sensor->publish_state(rpm);
-      }
-      step_++;
-      break;
+	case 23:  // MaxVol high: TSP 49
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 49 << 8);
+	  break;
 
-    case 24:  // Supply RPM (OT ID 86)
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 86, 0));
-      ESP_LOGD("brink", "OT ID 86 (RPM supply) response: 0x%08lX", response);
-      if (response && rpm_supply_sensor) {
-        uint16_t rpm = response & 0xFFFF;  // Dolne 16 bitów to wartość RPM
-        ESP_LOGD("brink", "Supply fan RPM: %d", rpm);
-        rpm_supply_sensor->publish_state(rpm);
-      }
-      step_++;
-      break;
+	case 24:  // MinVol low: TSP 50
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 50 << 8);
+	  break;
 
-    // --- TSP 53: MsgOperation ---
-    case 25:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 53 << 8));
-      ESP_LOGD("brink", "TSP 53 (MsgOperation) response: 0x%08lX", response);
-      if (response && msg_operation_sensor) {
-        uint8_t msg = (uint8_t) (response & 0xFF);
-        ESP_LOGD("brink", "Operation message: C%d", msg);
-        msg_operation_sensor->publish_state(msg);
-      }
-      step_++;
-      break;
+	case 25:  // MinVol high: TSP 51
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 51 << 8);
+	  break;
 
-    // --- TSP 55: TempAtmo (UNUSED - not in legacy, raw ADC values) ---
-    case 26:
-      // response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 55 << 8));
-      // ESP_LOGD("brink", "TSP 55 (TempAtmo) response: 0x%08lX", response);
-      // Pomijamy - nie używane w legacy Brink implementacji
-      step_++;
-      break;
+	case 26:  // OT70: VentStatus
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)70, 0);
+	  break;
 
-    // --- TSP 56: TempIndoors (UNUSED - not in legacy, raw ADC values) ---
-    case 27:
-      // response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 56 << 8));
-      // ESP_LOGD("brink", "TSP 56 (TempIndoors) response: 0x%08lX", response);
-      // Pomijamy - nie używane w legacy Brink implementacji
-      step_++;
-      break;
+	case 27:  // RPM Exhaust: OT85
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
+	  break;
 
-    // --- TSP 60/61: CurrentInputVol ---
-    case 28:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 60 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 28:  // RPM Supply: OT86
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
+	  break;
 
-    case 29:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 61 << 8));
-      ESP_LOGD("brink", "TSP 60/61 (CurrentInputVol) response: 0x%08lX", response);
-      if (response && current_input_vol_sensor) {
-        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
-        ESP_LOGD("brink", "Current input volume: %d m³/h", vol);
-        current_input_vol_sensor->publish_state(vol);
-      }
-      step_++;
-      break;
+	case 29:  // TSP 57: InitStatus
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
+	  break;
 
-    // --- TSP 62/63: CurrentOutputVol ---
-    case 30:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 62 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	// TSP 58/59 (VoltageParam1/2) - opcjonalne, wyłączone domyślnie
+	// case 30/31: ...
 
-    case 31:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 63 << 8));
-      ESP_LOGD("brink", "TSP 62/63 (CurrentOutputVol) response: 0x%08lX", response);
-      if (response && current_output_vol_sensor) {
-        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
-        ESP_LOGD("brink", "Current output volume: %d m³/h", vol);
-        current_output_vol_sensor->publish_state(vol);
-      }
-      step_++;
-      break;
+	case 30:  // TSP 60: CurrentInputVol low
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 60 << 8);
+	  break;
 
-    // --- TSP 48/49: MaxVol ---
-    case 32:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 48 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 31:  // TSP 61: CurrentInputVol high
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 61 << 8);
+	  break;
 
-    case 33:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 49 << 8));
-      ESP_LOGD("brink", "TSP 48/49 (MaxVol) response: 0x%08lX", response);
-      if (response && max_vol_sensor) {
-        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
-        ESP_LOGD("brink", "Max volume: %d m³/h", vol);
-        max_vol_sensor->publish_state(vol);
-      }
-      step_++;
-      break;
+	case 32:  // TSP 62: CurrentOutputVol low
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 62 << 8);
+	  break;
 
-    // --- TSP 50/51: MinVol ---
-    case 34:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 50 << 8));
-      if (ot->isValidResponse(response)) tsp_low_byte_ = (uint8_t) (response & 0xFF);
-      step_++;
-      break;
+	case 33:  // TSP 63: CurrentOutputVol high
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 63 << 8);
+	  break;
 
-    case 35:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 51 << 8));
-      ESP_LOGD("brink", "TSP 50/51 (MinVol) response: 0x%08lX", response);
-      if (response && min_vol_sensor) {
-        uint16_t vol = ((uint16_t) (response & 0xFF) << 8) | tsp_low_byte_;
-        ESP_LOGD("brink", "Min volume: %d m³/h", vol);
-        min_vol_sensor->publish_state(vol);
-      }
-      step_++;
-      break;
+	case 34:  // TSP 68: FrostStatus
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 68 << 8);
+	  break;
 
-    // --- TSP 57: InitStatus ---
-    case 36:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 57 << 8));
-      ESP_LOGD("brink", "TSP 57 (InitStatus) response: 0x%08lX", response);
-      if (response && init_status_binary) {
-        bool initiated = ((response & 0xFF) == 1);
-        ESP_LOGD("brink", "Appliance initiated: %s", initiated ? "YES" : "NO");
-        init_status_binary->publish_state(initiated);
-      }
-      step_++;
-      break;
+	case 35:  // TSP 69: Temp2Atmo
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 69 << 8);
+	  break;
 
-    // --- TSP 58: VoltageParam1 (OPTIONAL - moisture sensor, not installed) ---
-    case 37:
-      // response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 58 << 8));
-      // ESP_LOGD("brink", "TSP 58 (VoltageParam1) response: 0x%08lX", response);
-      // Czujnik wilgotności nie zainstalowany - pomijamy
-      step_++;
-      break;
+	case 36:  // TSP 70: Temp2Indoors
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 70 << 8);
+	  break;
 
-    // --- TSP 59: VoltageParam2 (OPTIONAL - CO2 sensor, not installed) ---
-    case 38:
-      // response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 59 << 8));
-      // ESP_LOGD("brink", "TSP 59 (VoltageParam2) response: 0x%08lX", response);
-      // Czujnik CO2 nie zainstalowany - pomijamy
-      step_++;
-      break;
+	case 37:  // TSP 71: TempPostHeater
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 71 << 8);
+	  break;
 
-    // --- TSP 68: FrostStatus ---
-    case 39:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 68 << 8));
-      ESP_LOGD("brink", "TSP 68 (FrostStatus) response: 0x%08lX", response);
-      if (response && frost_status_sensor) {
-        uint8_t frost = (uint8_t) (response & 0xFF);
-        ESP_LOGD("brink", "Frost status: %d (0=none, 1-4=imbalance, 5=fan off)", frost);
-        frost_status_sensor->publish_state(frost);
-      }
-      step_++;
-      break;
+	default:
+	  // Koniec cyklu, restart
+	  step_ = 0;
+	  async_state_ = AsyncState::IDLE;
+	  should_send = false;
+	  ESP_LOGD("brink", "Poll cycle complete, restarting");
+	  break;
+  }
 
-    // --- TSP 69: Temp2Atmo ---
-    case 40:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 69 << 8));
-      ESP_LOGD("brink", "TSP 69 (Temp2Atmo) response: 0x%08lX", response);
-      if (response && temp2_atmo_sensor) {
-        int temp = ((int) ((uint8_t) (response & 0xFF))) - 100;
-        ESP_LOGD("brink", "Temp2 atmosphere: %d°C", temp);
-        temp2_atmo_sensor->publish_state(temp);
-      }
-      step_++;
-      break;
-
-    // --- TSP 70: Temp2Indoors ---
-    case 41:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 70 << 8));
-      ESP_LOGD("brink", "TSP 70 (Temp2Indoors) response: 0x%08lX", response);
-      if (response && temp2_indoors_sensor) {
-        int temp = ((int) ((uint8_t) (response & 0xFF))) - 100;
-        ESP_LOGD("brink", "Temp2 indoors: %d°C", temp);
-        temp2_indoors_sensor->publish_state(temp);
-      }
-      step_++;
-      break;
-
-    // --- TSP 71: TempPostHeater ---
-    case 42:
-      response = ot->sendRequest(ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID) 89, 71 << 8));
-      ESP_LOGD("brink", "TSP 71 (TempPostHeater) response: 0x%08lX", response);
-      if (response && temp_postheater_sensor) {
-        int temp = (int) ((uint8_t) (response & 0xFF));
-        ESP_LOGD("brink", "Temp postheater: %d°C", temp);
-        temp_postheater_sensor->publish_state(temp);
-      }
-      step_ = 0;  // wracamy do początku po ostatnim case
-      break;
-
-    default:
-      step_ = 0;
-      break;
+  if (should_send && ot->sendRequestAync(request)) {
+	async_state_ = AsyncState::WAITING;
+	ESP_LOGV("brink", "Request sent for step %d, waiting for response", step_);
+  } else if (should_send) {
+	ESP_LOGW("brink", "Failed to send request for step %d, OT not ready", step_);
   }
 }
 
-// ===== Implementacje sterowania =====
-
-void BrinkBypassSelect::control(const std::string &value) {
-  if (parent_) {
-    parent_->set_bypass_mode(value);
+inline void BrinkOpenTherm::handle_response() {
+  if (last_response_status_ != OpenThermResponseStatus::SUCCESS) {
+	ESP_LOGW("brink", "Step %d: Response status: %s", 
+			 step_, ot->statusToString(last_response_status_));
+	step_++;
+	async_state_ = AsyncState::IDLE;
+	start_next_request();
+	return;
   }
-  publish_state(value);
+
+  unsigned long response = last_response_;
+
+  // Process response based on current step
+  switch (step_) {
+	case 0:  // Write ventilation - no data to process
+	  ESP_LOGD("brink", "Ventilation setpoint written");
+	  break;
+
+	case 1:  // T1
+	  if (ot->isValidResponse(response) && t_supply_in_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T1: %.2f°C", temp);
+		t_supply_in_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 2:  // T2
+	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T2: %.2f°C", temp);
+		t_supply_out_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 3:  // T3
+	  if (ot->isValidResponse(response) && t_exhaust_in_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T3: %.2f°C", temp);
+		t_exhaust_in_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 4:  // T4
+	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
+		float temp = ot->getFloat(response);
+		ESP_LOGD("brink", "T4: %.2f°C", temp);
+		t_exhaust_out_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 5:  // Flow LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 6:  // Flow HB + MsgOp
+	  if (ot->isValidResponse(response)) {
+		uint8_t msg_op_code = (uint8_t)(response & 0xFF);
+
+		if (current_flow_sensor) {
+		  uint16_t flow = ((uint16_t)msg_op_code << 8) | tsp_low_byte_;
+		  ESP_LOGD("brink", "Flow: %d m³/h", flow);
+		  current_flow_sensor->publish_state(flow);
+		}
+
+		if (msg_operation_sensor) {
+		  msg_operation_sensor->publish_state(msg_op_code);
+		}
+
+		if (msg_operation_text) {
+		  const char* desc = decode_msg_operation(msg_op_code);
+		  msg_operation_text->publish_state(desc);
+		}
+	  }
+	  break;
+
+	case 7:  // Filter
+	  if (ot->isValidResponse(response) && filter_status_binary) {
+		bool dirty = (response & 0xFF) == 1;
+		ESP_LOGD("brink", "Filter dirty: %s", dirty ? "YES" : "NO");
+		filter_status_binary->publish_state(dirty);
+	  }
+	  break;
+
+	case 8:  // Bypass
+	  if (ot->isValidResponse(response)) {
+		uint8_t v = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "Bypass: %d", v);
+		if (bypass_status_sensor) bypass_status_sensor->publish_state(v);
+		publish_bypass_text_(v);
+	  }
+	  break;
+
+	case 9:  // CPID LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 10:  // CPID HB
+	  if (ot->isValidResponse(response) && cpid_sensor) {
+		uint16_t cpid = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		cpid_sensor->publish_state(cpid);
+	  }
+	  break;
+
+	case 11:  // CPOD LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 12:  // CPOD HB
+	  if (ot->isValidResponse(response) && cpod_sensor) {
+		uint16_t cpod = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		cpod_sensor->publish_state(cpod);
+	  }
+	  break;
+
+	case 13:  // U1 LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 14:  // U1 HB
+	  if (ot->isValidResponse(response) && u1_sensor) {
+		uint16_t u1 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		u1_sensor->publish_state(u1);
+	  }
+	  break;
+
+	case 15:  // U2 LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 16:  // U2 HB
+	  if (ot->isValidResponse(response) && u2_sensor) {
+		uint16_t u2 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		u2_sensor->publish_state(u2);
+	  }
+	  break;
+
+	case 17:  // U3 LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 18:  // U3 HB
+	  if (ot->isValidResponse(response) && u3_sensor) {
+		uint16_t u3 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		u3_sensor->publish_state(u3);
+	  }
+	  break;
+
+	case 19:  // U4
+	  if (ot->isValidResponse(response) && u4_sensor) {
+		uint8_t u4_raw = (uint8_t)(response & 0xFF);
+		float u4 = u4_raw / 2.0f;
+		u4_sensor->publish_state(u4);
+	  }
+	  break;
+
+	case 20:  // U5
+	  if (ot->isValidResponse(response) && u5_sensor) {
+		uint8_t u5_raw = (uint8_t)(response & 0xFF);
+		float u5 = u5_raw / 2.0f;
+		u5_sensor->publish_state(u5);
+	  }
+	  break;
+
+	case 21:  // I1
+	  if (ot->isValidResponse(response) && i1_sensor) {
+		uint8_t i1_raw = (uint8_t)(response & 0xFF);
+		int i1 = (int)i1_raw - 100;
+		i1_sensor->publish_state(i1);
+	  }
+	  break;
+
+	case 22:  // MaxVol LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 23:  // MaxVol HB
+	  if (ot->isValidResponse(response) && max_vol_sensor) {
+		uint16_t max_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		max_vol_sensor->publish_state(max_vol);
+	  }
+	  break;
+
+	case 24:  // MinVol LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 25:  // MinVol HB
+	  if (ot->isValidResponse(response) && min_vol_sensor) {
+		uint16_t min_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		min_vol_sensor->publish_state(min_vol);
+	  }
+	  break;
+
+	case 26:  // VentStatus (OT70)
+	  if (ot->isValidResponse(response)) {
+		uint16_t status = ot->getUInt(response);
+		if (fault_indication_binary) {
+		  fault_indication_binary->publish_state(status & 0x1);
+		}
+		if (ventilation_mode_binary) {
+		  ventilation_mode_binary->publish_state((status & 0x2) >> 1);
+		}
+	  }
+	  break;
+
+	case 27:  // RPM Exhaust
+	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
+		uint16_t rpm = response & 0xFFFF;
+		if (rpm > 0 && rpm < 10000) {  // Sanity check
+		  rpm_exhaust_sensor->publish_state(rpm);
+		}
+	  }
+	  break;
+
+	case 28:  // RPM Supply
+	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
+		uint16_t rpm = response & 0xFFFF;
+		if (rpm > 0 && rpm < 10000) {
+		  rpm_supply_sensor->publish_state(rpm);
+		}
+	  }
+	  break;
+
+	case 29:  // InitStatus
+	  if (ot->isValidResponse(response) && init_status_binary) {
+		bool init = (response & 0xFF) == 1;
+		init_status_binary->publish_state(init);
+	  }
+	  break;
+
+	case 30:  // CurrentInputVol LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 31:  // CurrentInputVol HB
+	  if (ot->isValidResponse(response) && current_input_vol_sensor) {
+		uint16_t vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		current_input_vol_sensor->publish_state(vol);
+	  }
+	  break;
+
+	case 32:  // CurrentOutputVol LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 33:  // CurrentOutputVol HB
+	  if (ot->isValidResponse(response) && current_output_vol_sensor) {
+		uint16_t vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		current_output_vol_sensor->publish_state(vol);
+	  }
+	  break;
+
+	case 34:  // FrostStatus
+	  if (ot->isValidResponse(response) && frost_status_sensor) {
+		uint8_t frost = (uint8_t)(response & 0xFF);
+		frost_status_sensor->publish_state(frost);
+	  }
+	  break;
+
+	case 35:  // Temp2Atmo
+	  if (ot->isValidResponse(response) && temp2_atmo_sensor) {
+		uint8_t temp_raw = (uint8_t)(response & 0xFF);
+		int temp = (int)temp_raw - 100;
+		temp2_atmo_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 36:  // Temp2Indoors
+	  if (ot->isValidResponse(response) && temp2_indoors_sensor) {
+		uint8_t temp_raw = (uint8_t)(response & 0xFF);
+		int temp = (int)temp_raw - 100;
+		temp2_indoors_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 37:  // TempPostHeater
+	  if (ot->isValidResponse(response) && temp_postheater_sensor) {
+		uint8_t temp = (uint8_t)(response & 0xFF);
+		temp_postheater_sensor->publish_state(temp);
+	  }
+	  break;
+  }
+
+  // Move to next step
+  step_++;
+  async_state_ = AsyncState::IDLE;
+
+  // Immediately try to start next request (non-blocking)
+  start_next_request();
 }
 
-void BrinkPresetSelect::control(const std::string &value) {
-  if (parent_) {
-    parent_->apply_preset(value);
-  }
-  publish_state(value);
-}
-
-void BrinkOpenTherm::set_bypass_mode(const std::string &mode) {
-  ESP_LOGI("brink", "Setting bypass mode: %s", mode.c_str());
-
-  uint8_t tsp_value = 0;
-  if (mode == "Auto") tsp_value = 0;
-  else if (mode == "Open") tsp_value = 1;
-  else if (mode == "Closed") tsp_value = 2;
-
-  // Zapis do TSP 76 (Bypass Control)
-  unsigned long request = ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID) 89, (76 << 8) | tsp_value);
-  unsigned long response = ot->sendRequest(request);
-
-  if (ot->isValidResponse(response)) {
-    ESP_LOGI("brink", "Bypass mode set successfully: %s (TSP 76 = %d)", mode.c_str(), tsp_value);
-  } else {
-    ESP_LOGW("brink", "Failed to set bypass mode: %s", mode.c_str());
+// Control methods (same as sync version)
+inline void BrinkNumber::control(float value) {
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	this->parent_->target_ventilation_ = value;
   }
 }
 
-void BrinkOpenTherm::apply_preset(const std::string &preset) {
-  ESP_LOGI("brink", "Applying ventilation preset: %s", preset.c_str());
-
-  uint8_t preset_number = 0;
-  if (preset == "U1") preset_number = 1;
-  else if (preset == "U2") preset_number = 2;
-  else if (preset == "U3") preset_number = 3;
-
-  // Zapis do TSP 72 (Ventilation Preset)
-  unsigned long request = ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID) 89, (72 << 8) | preset_number);
-  unsigned long response = ot->sendRequest(request);
-
-  if (ot->isValidResponse(response)) {
-    ESP_LOGI("brink", "Preset %s applied successfully (TSP 72 = %d)", preset.c_str(), preset_number);
-  } else {
-    ESP_LOGW("brink", "Failed to apply preset: %s", preset.c_str());
+inline void BrinkU1Number::control(float value) {
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	this->parent_->write_u_preset(1, (uint16_t)value);
   }
 }
 
-void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
-  ESP_LOGI("brink", "Writing U%d preset value: %d", preset_num, value);
-
-  uint8_t tsp_low = 38 + (preset_num - 1) * 2;   // U1: TSP 38/39, U2: TSP 40/41, U3: TSP 42/43
-  uint8_t tsp_high = tsp_low + 1;
-
-  uint8_t low_byte = value & 0xFF;
-  uint8_t high_byte = (value >> 8) & 0xFF;
-
-  // Zapisz low byte
-  unsigned long req_low = ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID) 89, (tsp_low << 8) | low_byte);
-  unsigned long resp_low = ot->sendRequest(req_low);
-
-  if (!resp_low) {
-    ESP_LOGW("brink", "Failed to write U%d low byte (TSP %d)", preset_num, tsp_low);
-    return;
-  }
-
-  // Zapisz high byte
-  unsigned long req_high = ot->buildRequest(OpenThermMessageType::WRITE_DATA, (OpenThermMessageID) 89, (tsp_high << 8) | high_byte);
-  unsigned long resp_high = ot->sendRequest(req_high);
-
-  if (resp_high) {
-    ESP_LOGI("brink", "U%d preset written successfully: %d (TSP %d/%d)", preset_num, value, tsp_low, tsp_high);
-  } else {
-    ESP_LOGW("brink", "Failed to write U%d high byte (TSP %d)", preset_num, tsp_high);
+inline void BrinkU2Number::control(float value) {
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	this->parent_->write_u_preset(2, (uint16_t)value);
   }
 }
 
-void BrinkU1Number::control(float value) {
-  if (parent_) {
-    parent_->write_u_preset(1, (uint16_t) value);
+inline void BrinkU3Number::control(float value) {
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	this->parent_->write_u_preset(3, (uint16_t)value);
   }
-  publish_state(value);
 }
 
-void BrinkU2Number::control(float value) {
-  if (parent_) {
-    parent_->write_u_preset(2, (uint16_t) value);
+inline void BrinkBypassSelect::control(const std::string &value) {
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	this->parent_->set_bypass_mode(value);
   }
-  publish_state(value);
 }
 
-void BrinkU3Number::control(float value) {
-  if (parent_) {
-    parent_->write_u_preset(3, (uint16_t) value);
+inline void BrinkPresetSelect::control(const std::string &value) {
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	this->parent_->apply_preset(value);
   }
-  publish_state(value);
+}
+
+inline void BrinkOpenTherm::set_bypass_mode(const std::string &mode) {
+  uint8_t val = 1;  // default: auto
+  if (mode == "closed") val = 0;
+  else if (mode == "auto") val = 1;
+  else if (mode == "inlet_minimum") val = 2;
+
+  if (ot && ot->isReady()) {
+	unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA, 
+										 (OpenThermMessageID)89, (54 << 8) | val);
+	ot->sendRequestAync(req);
+	ESP_LOGI("brink", "Setting bypass mode: %s (val=%d)", mode.c_str(), val);
+  }
+}
+
+inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
+  uint8_t val = 1;  // default U1
+  if (preset == "U1") val = 1;
+  else if (preset == "U2") val = 2;
+  else if (preset == "U3") val = 3;
+
+  if (ot && ot->isReady()) {
+	unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
+										 (OpenThermMessageID)89, (47 << 8) | val);
+	ot->sendRequestAync(req);
+	ESP_LOGI("brink", "Applying preset: %s (val=%d)", preset.c_str(), val);
+  }
+}
+
+inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
+  if (!ot || !ot->isReady()) return;
+
+  uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
+
+  // Write low byte
+  unsigned long req_low = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
+										   (OpenThermMessageID)89, 
+										   (tsp_base << 8) | (value & 0xFF));
+  ot->sendRequestAync(req_low);
+
+  delay(100);  // Small delay between writes
+
+  // Write high byte
+  unsigned long req_high = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
+											(OpenThermMessageID)89,
+											((tsp_base + 1) << 8) | ((value >> 8) & 0xFF));
+  ot->sendRequestAync(req_high);
+
+  ESP_LOGI("brink", "Writing U%d preset: %d m³/h", preset_num, value);
 }
 
 }  // namespace brink_ventilation
 }  // namespace esphome
-
-
