@@ -105,9 +105,6 @@ class BrinkOpenTherm : public PollingComponent {
   unsigned long last_response_{0};
   OpenThermResponseStatus last_response_status_{OpenThermResponseStatus::NONE};
 
-  // Periodic read counter for slow-changing values (MAX_VOL, MIN_VOL)
-  uint8_t slow_read_counter_{0};
-
   // --- encje ESPHome ---
   sensor::Sensor *t_supply_in_sensor{nullptr};
   sensor::Sensor *t_supply_out_sensor{nullptr};
@@ -265,8 +262,7 @@ inline void BrinkOpenTherm::loop() {
 }
 
 inline void BrinkOpenTherm::update() {
-  // Increment slow read counter (for MAX_VOL/MIN_VOL periodic reads every ~30 min)
-  slow_read_counter_++;
+  // Empty - polling is driven by loop()
 }
 
 inline void BrinkOpenTherm::start_next_request() {
@@ -314,46 +310,24 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 54 (Bypass)", step_);
 	  break;
 
-	// === Periodic slow reads (first 10 cycles, then every ~30 min) ===
 	case 7:  // MAX_VOL: TSP 56 LB
-	  // Read during first 10 cycles OR every 1200 cycles (~30 min at 1.5s update interval)
-	  if (slow_read_counter_ <= 10 || slow_read_counter_ % 1200 == 0) {
-		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 56 << 8);
-		ESP_LOGI("brink", "Step %d: Reading TSP 56 (MAX_VOL LB) - cycle %d", step_, slow_read_counter_);
-	  } else {
-		step_++;
-		should_send = false;
-	  }
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 56 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 56 (MAX_VOL LB)", step_);
 	  break;
 
 	case 8:  // MAX_VOL: TSP 57 HB
-	  if (slow_read_counter_ <= 10 || slow_read_counter_ % 1200 == 1) {
-		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
-		ESP_LOGI("brink", "Step %d: Reading TSP 57 (MAX_VOL HB) - cycle %d", step_, slow_read_counter_);
-	  } else {
-		step_++;
-		should_send = false;
-	  }
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 57 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 57 (MAX_VOL HB)", step_);
 	  break;
 
 	case 9:  // MIN_VOL: TSP 58 LB
-	  if (slow_read_counter_ <= 10 || slow_read_counter_ % 1200 == 2) {
-		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 58 << 8);
-		ESP_LOGI("brink", "Step %d: Reading TSP 58 (MIN_VOL LB) - cycle %d", step_, slow_read_counter_);
-	  } else {
-		step_++;
-		should_send = false;
-	  }
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 58 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 58 (MIN_VOL LB)", step_);
 	  break;
 
 	case 10:  // MIN_VOL: TSP 59 HB
-	  if (slow_read_counter_ <= 10 || slow_read_counter_ % 1200 == 3) {
-		request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 59 << 8);
-		ESP_LOGI("brink", "Step %d: Reading TSP 59 (MIN_VOL HB) - cycle %d", step_, slow_read_counter_);
-	  } else {
-		step_++;
-		should_send = false;
-	  }
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 59 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 59 (MIN_VOL HB)", step_);
 	  break;
 
 	// === EXPERIMENTAL - może nie działać ===
