@@ -3,6 +3,10 @@
 #include "esphome.h"
 #include "OpenTherm.h"
 
+#ifdef USE_API
+#include "esphome/components/api/api_server.h"
+#endif
+
 namespace esphome {
 namespace brink_ventilation {
 
@@ -249,12 +253,31 @@ inline void BrinkOpenTherm::setup() {
 inline void BrinkOpenTherm::loop() {
   if (ot == nullptr) return;
 
+  // Check if API is connected - don't start polling until API connects
+  #ifdef USE_API
+  static bool api_wait_logged = false;
+  if (!api::global_api_server->is_connected()) {
+	if (!api_wait_logged) {
+	  ESP_LOGI("brink", "Waiting for API connection before starting OpenTherm polling...");
+	  api_wait_logged = true;
+	}
+	return; // Wait for API connection
+  }
+
+  // Log when API connects for the first time
+  static bool api_connected_logged = false;
+  if (!api_connected_logged) {
+	ESP_LOGI("brink", "API connected! Starting OpenTherm communication");
+	api_connected_logged = true;
+  }
+  #endif
+
   // Log startup status on first few iterations
   static uint8_t startup_log_count = 0;
   if (!startup_read_done_ && startup_log_count < 5) {
-    ESP_LOGD("brink", "loop() - startup_read_done=false, startup_step=%d, async_state=%d, ot->isReady=%d",
-             startup_step_, (int)async_state_, ot->isReady());
-    startup_log_count++;
+	ESP_LOGD("brink", "loop() - startup_read_done=false, startup_step=%d, async_state=%d, ot->isReady=%d",
+			 startup_step_, (int)async_state_, ot->isReady());
+	startup_log_count++;
   }
 
   // Non-blocking process - check OT state machine
