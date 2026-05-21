@@ -88,11 +88,6 @@ sensor:
     unit_of_measurement: "°C"
     device_class: temperature
     accuracy_decimals: 1
-  - platform: brink_ventilation
-    type: I1
-    name: "I1 (imbalance)"
-    unit_of_measurement: "%"
-    accuracy_decimals: 0
 
   # === Nowe sensory - RPM wentylatorów ===
   - platform: brink_ventilation
@@ -107,20 +102,6 @@ sensor:
     unit_of_measurement: "RPM"
     icon: "mdi:fan"
     accuracy_decimals: 0
-
-  # === Nowe sensory - temperatury dodatkowe (TSP 55/56 DISABLED - not used in legacy) ===
-  # - platform: brink_ventilation
-  #   type: TEMP_ATMO
-  #   name: "Temp atmosfera"
-  #   unit_of_measurement: "°C"
-  #   device_class: temperature
-  #   accuracy_decimals: 0
-  # - platform: brink_ventilation
-  #   type: TEMP_INDOORS
-  #   name: "Temp wewnętrzna"
-  #   unit_of_measurement: "°C"
-  #   device_class: temperature
-  #   accuracy_decimals: 0
 
   # === Nowe sensory - objętości ===
   - platform: brink_ventilation

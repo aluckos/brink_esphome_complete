@@ -64,6 +64,18 @@ sensor:
     name: "Bypass status (0-1-2)"
     accuracy_decimals: 0
 
+  - platform: brink_ventilation
+    type: CURRENT_INPUT_VOL
+    name: "Objętość wejściowa (TSP 60-61)"
+    unit_of_measurement: "m³/h"
+    accuracy_decimals: 0
+
+  - platform: brink_ventilation
+    type: CURRENT_OUTPUT_VOL
+    name: "Objętość wyjściowa (TSP 62-63)"
+    unit_of_measurement: "m³/h"
+    accuracy_decimals: 0
+
 number:
   - platform: brink_ventilation
     name: "Nastawa mocy (ID71)"
@@ -72,6 +84,14 @@ binary_sensor:
   - platform: brink_ventilation
     type: FILTER_STATUS
     name: "Filtr - status"
+
+  - platform: brink_ventilation
+    type: FAULT_INDICATION
+    name: "Awaria"
+
+  - platform: brink_ventilation
+    type: VENTILATION_MODE
+    name: "Tryb wentylacji"
 
 text_sensor:
   - platform: brink_ventilation
