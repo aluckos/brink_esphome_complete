@@ -133,8 +133,6 @@ class BrinkOpenTherm : public PollingComponent {
   sensor::Sensor *msg_operation_sensor{nullptr};
   text_sensor::TextSensor *msg_operation_text{nullptr};
 
-  sensor::Sensor *temp_atmo_sensor{nullptr};
-  sensor::Sensor *temp_indoors_sensor{nullptr};
   binary_sensor::BinarySensor *init_status_binary{nullptr};
   sensor::Sensor *frost_status_sensor{nullptr};
   sensor::Sensor *temp2_atmo_sensor{nullptr};
@@ -178,8 +176,6 @@ class BrinkOpenTherm : public PollingComponent {
   void set_rpm_exhaust_sensor(sensor::Sensor *s) { rpm_exhaust_sensor = s; }
   void set_rpm_supply_sensor(sensor::Sensor *s) { rpm_supply_sensor = s; }
   void set_msg_operation_sensor(sensor::Sensor *s) { msg_operation_sensor = s; }
-  void set_temp_atmo_sensor(sensor::Sensor *s) { temp_atmo_sensor = s; }
-  void set_temp_indoors_sensor(sensor::Sensor *s) { temp_indoors_sensor = s; }
   void set_init_status_binary(binary_sensor::BinarySensor *s) { init_status_binary = s; }
   void set_frost_status_sensor(sensor::Sensor *s) { frost_status_sensor = s; }
   void set_temp2_atmo_sensor(sensor::Sensor *s) { temp2_atmo_sensor = s; }

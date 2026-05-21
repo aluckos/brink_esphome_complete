@@ -32,8 +32,6 @@ TYPES = {
     "RPM_SUPPLY": "rpm_supply",
     # Nowe TSP 1-bajtowe
     "MSG_OPERATION": "msg_operation",
-    "TEMP_ATMO": "temp_atmo",
-    "TEMP_INDOORS": "temp_indoors",
     "FROST_STATUS": "frost_status",
     "TEMP2_ATMO": "temp2_atmo",
     "TEMP2_INDOORS": "temp2_indoors",
