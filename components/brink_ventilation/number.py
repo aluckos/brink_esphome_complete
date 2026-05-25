@@ -48,15 +48,24 @@ async def to_code(config):
     elif number_type == "U1":
         var = cg.new_Pvariable(config[CONF_ID])
         await number.register_number(var, config, min_value=0, max_value=100, step=10)
+        # Set initial value to 100 if not specified
+        if "initial_value" not in config:
+            cg.add(var.set_initial_value(100))
         cg.add(var.set_parent(parent))
         cg.add(parent.set_u1_number(var))
     elif number_type == "U2":
         var = cg.new_Pvariable(config[CONF_ID])
         await number.register_number(var, config, min_value=0, max_value=100, step=10)
+        # Set initial value to 200 if not specified
+        if "initial_value" not in config:
+            cg.add(var.set_initial_value(200))
         cg.add(var.set_parent(parent))
         cg.add(parent.set_u2_number(var))
     elif number_type == "U3":
         var = cg.new_Pvariable(config[CONF_ID])
         await number.register_number(var, config, min_value=0, max_value=100, step=10)
+        # Set initial value to 300 if not specified
+        if "initial_value" not in config:
+            cg.add(var.set_initial_value(300))
         cg.add(var.set_parent(parent))
         cg.add(parent.set_u3_number(var))
