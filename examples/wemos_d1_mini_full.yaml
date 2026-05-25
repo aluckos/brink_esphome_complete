@@ -182,6 +182,14 @@ number:
     type: U3
     name: "U3 preset (write)"
     unit_of_measurement: "m³/h"
+  - platform: brink_ventilation
+    type: U4
+    name: "U4 bypass atmo temp (write)"
+    unit_of_measurement: "°C"
+  - platform: brink_ventilation
+    type: U5
+    name: "U5 bypass indoor temp (write)"
+    unit_of_measurement: "°C"
 
 binary_sensor:
   - platform: brink_ventilation
