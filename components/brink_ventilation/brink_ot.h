@@ -862,8 +862,23 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   // Set flag to pause async polling loop
   write_in_progress_ = true;
 
-  // Wait a bit for current async operation to complete
-  delay(100);
+  // Wait for OT to be ready (max 2 seconds)
+  int wait_count = 0;
+  const int max_wait = 40;  // 40 * 50ms = 2 seconds
+  while (!ot->isReady() && wait_count < max_wait) {
+    delay(50);
+    wait_count++;
+  }
+
+  if (!ot->isReady()) {
+    ESP_LOGE("brink", "write_u_preset: Timeout waiting for OT ready");
+    write_in_progress_ = false;
+    return;
+  }
+
+  if (wait_count > 0) {
+    ESP_LOGD("brink", "Waited %d ms for OT ready", wait_count * 50);
+  }
 
   uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
   uint8_t low_byte = value & 0xFF;
@@ -877,6 +892,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 
   if (!resp_low) {
 	ESP_LOGE("brink", "Failed to write U%d low byte (TSP %d)", preset_num, tsp_base);
+	write_in_progress_ = false;
 	return;
   }
   ESP_LOGD("brink", "Wrote TSP %d (LB) = 0x%02X", tsp_base, low_byte);
