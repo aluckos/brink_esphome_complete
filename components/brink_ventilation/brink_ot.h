@@ -345,25 +345,55 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 63 (CURRENT_OUTPUT_VOL HB)", step_);
 	  break;
 
+	case 16:  // U1: TSP 38 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 38 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 38 (U1 LB)", step_);
+	  break;
+
+	case 17:  // U1: TSP 39 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 39 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 39 (U1 HB)", step_);
+	  break;
+
+	case 18:  // U2: TSP 40 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 40 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 40 (U2 LB)", step_);
+	  break;
+
+	case 19:  // U2: TSP 41 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 41 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 41 (U2 HB)", step_);
+	  break;
+
+	case 20:  // U3: TSP 42 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 42 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 42 (U3 LB)", step_);
+	  break;
+
+	case 21:  // U3: TSP 43 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 43 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 43 (U3 HB)", step_);
+	  break;
+
 	// === EXPERIMENTAL - może nie działać ===
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 16:  // RPM Exhaust: OT85
+	case 22:  // RPM Exhaust: OT85
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Exhaust (OT ID 85)", step_);
 	  break;
 
-	case 17:  // RPM Supply: OT86
+	case 23:  // RPM Supply: OT86
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	case 18:  // T2 ID 81
+	case 24:  // T2 ID 81
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
 	  break;
 
-	case 19:  // T4 ID 83
+	case 25:  // T4 ID 83
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
 	  break;
@@ -375,7 +405,7 @@ inline void BrinkOpenTherm::start_next_request() {
 	  step_ = 0;
 	  async_state_ = AsyncState::IDLE;
 	  should_send = false;
-	  ESP_LOGD("brink", "Poll cycle complete, restarting");
+	  ESP_LOGD("brink", "Poll cycle complete, restarting from step 0");
 	  break;
   }
 
@@ -555,9 +585,55 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
+	case 16:  // U1 LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 17:  // U1 HB
+	  if (ot->isValidResponse(response) && u1_sensor) {
+		uint16_t u1 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "U1: %d m³/h", u1);
+		u1_sensor->publish_state(u1);
+	  }
+	  break;
+
+	case 18:  // U2 LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 19:  // U2 HB
+	  if (ot->isValidResponse(response) && u2_sensor) {
+		uint16_t u2 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "U2: %d m³/h", u2);
+		u2_sensor->publish_state(u2);
+	  }
+	  break;
+
+	case 20:  // U3 LB
+	  if (ot->isValidResponse(response)) {
+		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+	  }
+	  break;
+
+	case 21:  // U3 HB
+	  if (ot->isValidResponse(response) && u3_sensor) {
+		uint16_t u3 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		ESP_LOGI("brink", "U3: %d m³/h", u3);
+		u3_sensor->publish_state(u3);
+	  }
+	  #ifndef BRINK_ENABLE_EXPERIMENTAL
+	  // If experimental not enabled, reset after U3
+	  step_ = -1;  // Will become 0 after step_++ below
+	  #endif
+	  break;
+
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 16:  // RPM Exhaust
+	case 22:  // RPM Exhaust
 	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Exhaust: %d", rpm);
@@ -565,7 +641,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 17:  // RPM Supply
+	case 23:  // RPM Supply
 	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Supply: %d", rpm);
@@ -573,7 +649,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 18:  // T2
+	case 24:  // T2
 	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T2: %.2f°C", temp);
@@ -581,7 +657,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 19:  // T4
+	case 25:  // T4
 	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T4: %.2f°C", temp);
