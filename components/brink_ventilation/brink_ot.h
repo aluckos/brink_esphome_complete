@@ -853,56 +853,34 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 
   ESP_LOGI("brink", "Validation passed for U%d = %d", preset_num, value);
 
-  // Wait for OT to be ready (retry up to 50 times with 20ms delay = 1 second total)
-  int retry_count = 0;
-  const int max_retries = 50;
-  const int retry_delay_ms = 20;
-
-  while (!ot->isReady() && retry_count < max_retries) {
-	delay(retry_delay_ms);
-	retry_count++;
-  }
-
-  if (!ot->isReady()) {
-	ESP_LOGE("brink", "write_u_preset: OT not ready after %d retries (timeout)", max_retries);
-	return;
-  }
-
-  if (retry_count > 0) {
-	ESP_LOGD("brink", "OT became ready after %d retries (%d ms)", retry_count, retry_count * retry_delay_ms);
-  }
-
   uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
+  uint8_t low_byte = value & 0xFF;
+  uint8_t high_byte = (value >> 8) & 0xFF;
 
-  // Write low byte
+  // Write low byte using synchronous sendRequest (blocks until response)
   unsigned long req_low = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
 										   (OpenThermMessageID)89, 
-										   (tsp_base << 8) | (value & 0xFF));
-  ot->sendRequestAync(req_low);
-  ESP_LOGD("brink", "Sent TSP %d (LB) = 0x%02X", tsp_base, value & 0xFF);
+										   (tsp_base << 8) | low_byte);
+  unsigned long resp_low = ot->sendRequest(req_low);
 
-  delay(100);  // Small delay between writes
-
-  // Wait again for OT to be ready for high byte
-  retry_count = 0;
-  while (!ot->isReady() && retry_count < max_retries) {
-	delay(retry_delay_ms);
-	retry_count++;
-  }
-
-  if (!ot->isReady()) {
-	ESP_LOGE("brink", "write_u_preset: OT not ready for HB after %d retries", max_retries);
+  if (!resp_low) {
+	ESP_LOGE("brink", "Failed to write U%d low byte (TSP %d)", preset_num, tsp_base);
 	return;
   }
+  ESP_LOGD("brink", "Wrote TSP %d (LB) = 0x%02X", tsp_base, low_byte);
 
-  // Write high byte
+  // Write high byte using synchronous sendRequest
   unsigned long req_high = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
 											(OpenThermMessageID)89,
-											((tsp_base + 1) << 8) | ((value >> 8) & 0xFF));
-  ot->sendRequestAync(req_high);
-  ESP_LOGD("brink", "Sent TSP %d (HB) = 0x%02X", tsp_base + 1, (value >> 8) & 0xFF);
+											((tsp_base + 1) << 8) | high_byte);
+  unsigned long resp_high = ot->sendRequest(req_high);
 
-  ESP_LOGI("brink", "Successfully wrote U%d preset: %d m³/h", preset_num, value);
+  if (resp_high) {
+	ESP_LOGI("brink", "Successfully wrote U%d preset: %d m³/h (TSP %d/%d)", 
+			 preset_num, value, tsp_base, tsp_base + 1);
+  } else {
+	ESP_LOGE("brink", "Failed to write U%d high byte (TSP %d)", preset_num, tsp_base + 1);
+  }
 }
 
 // Setup methods for U1/U2/U3 numbers (after BrinkOpenTherm is fully defined)
