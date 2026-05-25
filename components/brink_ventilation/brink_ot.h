@@ -81,6 +81,34 @@ class BrinkU3Number : public number::Number, public Component {
   void setup() override;
 };
 
+// Number: U4 bypass atmospheric temperature threshold (TSP 6, value ×2)
+class BrinkU4Number : public number::Number, public Component {
+ public:
+  BrinkOpenTherm *parent_{nullptr};
+  void set_parent(BrinkOpenTherm *parent) { 
+    parent_ = parent;
+    this->traits.set_min_value(0);
+    this->traits.set_max_value(50);  // 0-50°C
+    this->traits.set_step(0.5);
+  }
+  void control(float value) override;
+  void setup() override;
+};
+
+// Number: U5 bypass indoor temperature threshold (TSP 7, value ×2)
+class BrinkU5Number : public number::Number, public Component {
+ public:
+  BrinkOpenTherm *parent_{nullptr};
+  void set_parent(BrinkOpenTherm *parent) { 
+    parent_ = parent;
+    this->traits.set_min_value(0);
+    this->traits.set_max_value(50);  // 0-50°C
+    this->traits.set_step(0.5);
+  }
+  void control(float value) override;
+  void setup() override;
+};
+
 // Select: Bypass control (Auto/Open/Closed)
 class BrinkBypassSelect : public select::Select, public Component {
  public:
@@ -124,6 +152,8 @@ class BrinkOpenTherm : public PollingComponent {
   uint16_t u1_value_{0};
   uint16_t u2_value_{0};
   uint16_t u3_value_{0};
+  uint8_t u4_value_{0};  // U4: Minimum atmospheric temperature bypass (×2)
+  uint8_t u5_value_{0};  // U5: Minimum indoor temperature bypass (×2)
 
   // Async state machine
   AsyncState async_state_{AsyncState::IDLE};
@@ -174,6 +204,8 @@ class BrinkOpenTherm : public PollingComponent {
   number::Number *u1_number{nullptr};
   number::Number *u2_number{nullptr};
   number::Number *u3_number{nullptr};
+  number::Number *u4_number{nullptr};
+  number::Number *u5_number{nullptr};
   select::Select *ventilation_preset_select{nullptr};
   select::Select *bypass_select{nullptr};
 
@@ -182,6 +214,8 @@ class BrinkOpenTherm : public PollingComponent {
   void set_bypass_mode(const std::string &mode);
   void apply_preset(const std::string &preset);
   void write_u_preset(uint8_t preset_num, uint16_t value);
+  void write_u4(float temp_celsius);
+  void write_u5(float temp_celsius);
 
   // Settery (same as sync version)
   void set_t_supply_in_sensor(sensor::Sensor *s) { t_supply_in_sensor = s; }
@@ -216,6 +250,8 @@ class BrinkOpenTherm : public PollingComponent {
   void set_u1_number(number::Number *n) { u1_number = n; }
   void set_u2_number(number::Number *n) { u2_number = n; }
   void set_u3_number(number::Number *n) { u3_number = n; }
+  void set_u4_number(number::Number *n) { u4_number = n; }
+  void set_u5_number(number::Number *n) { u5_number = n; }
   void set_ventilation_preset_select(select::Select *s) { ventilation_preset_select = s; }
   void set_bypass_select(select::Select *s) { bypass_select = s; }
   void set_ventilation_number(BrinkNumber *n) { n->set_parent(this); }
@@ -402,25 +438,35 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 5 (U3 HB)", step_);
 	  break;
 
+	case 22:  // U4: TSP 6 (Minimum atmospheric temperature bypass ×2)
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 6 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 6 (U4 bypass temp atmospheric)", step_);
+	  break;
+
+	case 23:  // U5: TSP 7 (Minimum indoor temperature bypass ×2)
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 7 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 7 (U5 bypass temp indoor)", step_);
+	  break;
+
 	// === EXPERIMENTAL - może nie działać ===
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 22:  // RPM Exhaust: OT85
+	case 24:  // RPM Exhaust: OT85
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)85, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Exhaust (OT ID 85)", step_);
 	  break;
 
-	case 23:  // RPM Supply: OT86
+	case 25:  // RPM Supply: OT86
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)86, 0);
 	  ESP_LOGD("brink", "Step %d: Reading RPM Supply (OT ID 86)", step_);
 	  break;
 
-	case 24:  // T2 ID 81
+	case 26:  // T2 ID 81
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)81, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T2 (OT ID 81)", step_);
 	  break;
 
-	case 25:  // T4 ID 83
+	case 27:  // T4 ID 83
 	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)83, 0);
 	  ESP_LOGD("brink", "Step %d: Reading T4 (OT ID 83)", step_);
 	  break;
@@ -666,15 +712,37 @@ inline void BrinkOpenTherm::handle_response() {
 		ESP_LOGI("brink", "U3: %d m³/h (raw: HB=0x%02X, LB=0x%02X)", u3, high_byte, tsp_low_byte_);
 		u3_sensor->publish_state(u3);
 	  }
+	  break;
+
+	case 22:  // U4 (TSP 6) - Minimum atmospheric temperature bypass (×2)
+	  if (ot->isValidResponse(response) && u4_sensor) {
+		uint8_t raw_value = (uint8_t)(response & 0xFF);
+		u4_value_ = raw_value;  // Cache raw value
+		// Convert to actual temperature: raw / 2
+		float temp = raw_value / 2.0f;
+		ESP_LOGI("brink", "U4 (bypass atmo temp): %.1f°C (raw: %d)", temp, raw_value);
+		u4_sensor->publish_state(temp);
+	  }
+	  break;
+
+	case 23:  // U5 (TSP 7) - Minimum indoor temperature bypass (×2)
+	  if (ot->isValidResponse(response) && u5_sensor) {
+		uint8_t raw_value = (uint8_t)(response & 0xFF);
+		u5_value_ = raw_value;  // Cache raw value
+		// Convert to actual temperature: raw / 2
+		float temp = raw_value / 2.0f;
+		ESP_LOGI("brink", "U5 (bypass indoor temp): %.1f°C (raw: %d)", temp, raw_value);
+		u5_sensor->publish_state(temp);
+	  }
 	  #ifndef BRINK_ENABLE_EXPERIMENTAL
-	  // If experimental not enabled, reset after U3
+	  // If experimental not enabled, reset after U5
 	  step_ = -1;  // Will become 0 after step_++ below
 	  #endif
 	  break;
 
 	#ifdef BRINK_ENABLE_EXPERIMENTAL
 
-	case 22:  // RPM Exhaust
+	case 24:  // RPM Exhaust
 	  if (ot->isValidResponse(response) && rpm_exhaust_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Exhaust: %d", rpm);
@@ -682,7 +750,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 23:  // RPM Supply
+	case 25:  // RPM Supply
 	  if (ot->isValidResponse(response) && rpm_supply_sensor) {
 		uint16_t rpm = (uint16_t)(response & 0xFFFF);
 		ESP_LOGD("brink", "RPM Supply: %d", rpm);
@@ -690,7 +758,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 24:  // T2
+	case 26:  // T2
 	  if (ot->isValidResponse(response) && t_supply_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T2: %.2f°C", temp);
@@ -698,7 +766,7 @@ inline void BrinkOpenTherm::handle_response() {
 	  }
 	  break;
 
-	case 25:  // T4
+	case 27:  // T4
 	  if (ot->isValidResponse(response) && t_exhaust_out_sensor) {
 		float temp = ot->getFloat(response);
 		ESP_LOGD("brink", "T4: %.2f°C", temp);
@@ -754,6 +822,28 @@ inline void BrinkU3Number::control(float value) {
 	this->parent_->write_u_preset(3, (uint16_t)value);
   } else {
 	ESP_LOGE("brink", "U3Number::control: parent is NULL!");
+  }
+}
+
+inline void BrinkU4Number::control(float value) {
+  ESP_LOGI("brink", "U4Number::control called with value=%.1f°C", value);
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	ESP_LOGD("brink", "Calling write_u4(%.1f)", value);
+	this->parent_->write_u4(value);
+  } else {
+	ESP_LOGE("brink", "U4Number::control: parent is NULL!");
+  }
+}
+
+inline void BrinkU5Number::control(float value) {
+  ESP_LOGI("brink", "U5Number::control called with value=%.1f°C", value);
+  this->publish_state(value);
+  if (this->parent_ != nullptr) {
+	ESP_LOGD("brink", "Calling write_u5(%.1f)", value);
+	this->parent_->write_u5(value);
+  } else {
+	ESP_LOGE("brink", "U5Number::control: parent is NULL!");
   }
 }
 
@@ -979,6 +1069,100 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   write_in_progress_ = false;
 }
 
+inline void BrinkOpenTherm::write_u4(float temp_celsius) {
+  ESP_LOGI("brink", "write_u4 called: %.1f°C", temp_celsius);
+
+  if (!ot) {
+    ESP_LOGE("brink", "write_u4: OT is NULL!");
+    return;
+  }
+
+  // Convert temperature to raw value (× 2)
+  uint8_t raw_value = (uint8_t)(temp_celsius * 2.0f);
+  ESP_LOGI("brink", "U4 raw value: %d (%.1f°C × 2)", raw_value, temp_celsius);
+
+  // Set flag to pause async polling loop
+  write_in_progress_ = true;
+
+  // Wait for OT to be ready (max 2 seconds)
+  int wait_count = 0;
+  const int max_wait = 40;  // 40 * 50ms = 2 seconds
+  while (!ot->isReady() && wait_count < max_wait) {
+    ot->process();  // Keep processing OT communication
+    delay(50);
+    wait_count++;
+  }
+
+  if (!ot->isReady()) {
+    ESP_LOGE("brink", "write_u4: Timeout waiting for OT ready");
+    write_in_progress_ = false;
+    return;
+  }
+
+  // Write to TSP 6 using synchronous sendRequest
+  unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
+                                       (OpenThermMessageID)89,
+                                       (6 << 8) | raw_value);
+  unsigned long resp = ot->sendRequest(req);
+
+  if (resp) {
+    u4_value_ = raw_value;  // Cache raw value
+    ESP_LOGI("brink", "Successfully wrote U4: %.1f°C (raw: %d, TSP 6)", temp_celsius, raw_value);
+  } else {
+    ESP_LOGE("brink", "Failed to write U4 (TSP 6)");
+  }
+
+  // Clear flag to resume async polling
+  write_in_progress_ = false;
+}
+
+inline void BrinkOpenTherm::write_u5(float temp_celsius) {
+  ESP_LOGI("brink", "write_u5 called: %.1f°C", temp_celsius);
+
+  if (!ot) {
+    ESP_LOGE("brink", "write_u5: OT is NULL!");
+    return;
+  }
+
+  // Convert temperature to raw value (× 2)
+  uint8_t raw_value = (uint8_t)(temp_celsius * 2.0f);
+  ESP_LOGI("brink", "U5 raw value: %d (%.1f°C × 2)", raw_value, temp_celsius);
+
+  // Set flag to pause async polling loop
+  write_in_progress_ = true;
+
+  // Wait for OT to be ready (max 2 seconds)
+  int wait_count = 0;
+  const int max_wait = 40;  // 40 * 50ms = 2 seconds
+  while (!ot->isReady() && wait_count < max_wait) {
+    ot->process();  // Keep processing OT communication
+    delay(50);
+    wait_count++;
+  }
+
+  if (!ot->isReady()) {
+    ESP_LOGE("brink", "write_u5: Timeout waiting for OT ready");
+    write_in_progress_ = false;
+    return;
+  }
+
+  // Write to TSP 7 using synchronous sendRequest
+  unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
+                                       (OpenThermMessageID)89,
+                                       (7 << 8) | raw_value);
+  unsigned long resp = ot->sendRequest(req);
+
+  if (resp) {
+    u5_value_ = raw_value;  // Cache raw value
+    ESP_LOGI("brink", "Successfully wrote U5: %.1f°C (raw: %d, TSP 7)", temp_celsius, raw_value);
+  } else {
+    ESP_LOGE("brink", "Failed to write U5 (TSP 7)");
+  }
+
+  // Clear flag to resume async polling
+  write_in_progress_ = false;
+}
+
 // Setup methods for U1/U2/U3 numbers (after BrinkOpenTherm is fully defined)
 inline void BrinkU1Number::setup() {
   // Update range after parent reads min/max from device
@@ -1000,6 +1184,14 @@ inline void BrinkU3Number::setup() {
     this->traits.set_min_value(parent_->min_vol_);
     this->traits.set_max_value(parent_->max_vol_);
   }
+}
+
+inline void BrinkU4Number::setup() {
+  // U4/U5 don't depend on min/max vol, they are temperature thresholds
+}
+
+inline void BrinkU5Number::setup() {
+  // U4/U5 don't depend on min/max vol, they are temperature thresholds
 }
 
 }  // namespace brink_ventilation
