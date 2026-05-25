@@ -6,7 +6,12 @@ esp8266:
   board: d1_mini
 
 logger:
+
 api:
+  # Note: U1/U2/U3 preset writes may trigger "api took a long time" warnings
+  # This is expected - synchronous OpenTherm writes can take 500-1500ms
+  # The warning is harmless and doesn't affect functionality
+
 ota:
 
 wifi:
@@ -136,20 +141,7 @@ sensor:
     icon: "mdi:message-alert"
     accuracy_decimals: 0
 
-  # === TSP 57-59, 68-71 ===
-  # TSP 58/59 (Voltage Param1/2) - OPTIONAL sensors, not installed in most systems
-  # - platform: brink_ventilation
-  #   type: VOLTAGE_PARAM1
-  #   name: "Napięcie param1 (wilgoć)"
-  #   unit_of_measurement: "V"
-  #   icon: "mdi:flash"
-  #   accuracy_decimals: 1
-  # - platform: brink_ventilation
-  #   type: VOLTAGE_PARAM2
-  #   name: "Napięcie param2 (CO2)"
-  #   unit_of_measurement: "V"
-  #   icon: "mdi:flash"
-  #   accuracy_decimals: 1
+  # === TSP 68-71 ===
   - platform: brink_ventilation
     type: FROST_STATUS
     name: "Status mrozu"
