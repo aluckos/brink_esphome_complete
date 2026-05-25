@@ -788,15 +788,47 @@ inline void BrinkOpenTherm::set_bypass_mode(const std::string &mode) {
 inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
   ESP_LOGI("brink", "apply_preset called: %s", preset.c_str());
 
-  uint8_t val = 1;  // default U1
-  if (preset == "U1") val = 1;
-  else if (preset == "U2") val = 2;
-  else if (preset == "U3") val = 3;
-
   if (!ot) {
 	ESP_LOGE("brink", "apply_preset: OT is NULL!");
 	return;
   }
+
+  // Get cached preset value
+  uint16_t target_value = 0;
+  if (preset == "U1") {
+	target_value = u1_value_;
+	if (target_value == 0) {
+	  ESP_LOGE("brink", "U1 value not available yet");
+	  return;
+	}
+  } else if (preset == "U2") {
+	target_value = u2_value_;
+	if (target_value == 0) {
+	  ESP_LOGE("brink", "U2 value not available yet");
+	  return;
+	}
+  } else if (preset == "U3") {
+	target_value = u3_value_;
+	if (target_value == 0) {
+	  ESP_LOGE("brink", "U3 value not available yet");
+	  return;
+	}
+  } else {
+	ESP_LOGE("brink", "Unknown preset: %s", preset.c_str());
+	return;
+  }
+
+  // Check max_vol_ for percentage calculation
+  if (max_vol_ == 0) {
+	ESP_LOGE("brink", "Max volume not read yet, cannot calculate percentage");
+	return;
+  }
+
+  // Calculate percentage (0-100) like in legacy: value * 100 / maxVent
+  uint8_t percentage = (uint8_t)((target_value * 100) / max_vol_);
+  if (percentage > 100) percentage = 100;
+
+  ESP_LOGI("brink", "Applying preset %s: %d m³/h = %d%%", preset.c_str(), target_value, percentage);
 
   // Set flag to pause async polling loop
   write_in_progress_ = true;
@@ -820,15 +852,16 @@ inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
 	ESP_LOGD("brink", "apply_preset: Waited %d ms for OT ready", wait_count * 50);
   }
 
-  // Write to TSP 72 using synchronous sendRequest (Ventilation Preset selector)
+  // Use VentNomVentSet (OT ID 71) to set ventilation percentage like legacy setVentilation()
   unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
-									   (OpenThermMessageID)89, (72 << 8) | val);
+									   (OpenThermMessageID)71, percentage);
   unsigned long resp = ot->sendRequest(req);
 
   if (resp) {
-	ESP_LOGI("brink", "Successfully applied preset: %s (TSP 72 = %d)", preset.c_str(), val);
+	ESP_LOGI("brink", "Successfully applied preset: %s → %d%% (%d m³/h)", 
+			 preset.c_str(), percentage, target_value);
   } else {
-	ESP_LOGE("brink", "Failed to apply preset: %s (TSP 72)", preset.c_str());
+	ESP_LOGE("brink", "Failed to apply preset: %s (VentNomVentSet)", preset.c_str());
   }
 
   // Clear flag to resume async polling
