@@ -786,17 +786,53 @@ inline void BrinkOpenTherm::set_bypass_mode(const std::string &mode) {
 }
 
 inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
+  ESP_LOGI("brink", "apply_preset called: %s", preset.c_str());
+
   uint8_t val = 1;  // default U1
   if (preset == "U1") val = 1;
   else if (preset == "U2") val = 2;
   else if (preset == "U3") val = 3;
 
-  if (ot && ot->isReady()) {
-	unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
-										 (OpenThermMessageID)89, (47 << 8) | val);
-	ot->sendRequestAync(req);
-	ESP_LOGI("brink", "Applying preset: %s (val=%d)", preset.c_str(), val);
+  if (!ot) {
+	ESP_LOGE("brink", "apply_preset: OT is NULL!");
+	return;
   }
+
+  // Set flag to pause async polling loop
+  write_in_progress_ = true;
+
+  // Wait for OT to be ready (max 2 seconds)
+  int wait_count = 0;
+  const int max_wait = 40;  // 40 * 50ms = 2 seconds
+  while (!ot->isReady() && wait_count < max_wait) {
+	ot->process();  // Keep processing OT communication
+	delay(50);
+	wait_count++;
+  }
+
+  if (!ot->isReady()) {
+	ESP_LOGE("brink", "apply_preset: Timeout waiting for OT ready");
+	write_in_progress_ = false;
+	return;
+  }
+
+  if (wait_count > 0) {
+	ESP_LOGD("brink", "apply_preset: Waited %d ms for OT ready", wait_count * 50);
+  }
+
+  // Write to TSP 47 using synchronous sendRequest
+  unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
+									   (OpenThermMessageID)89, (47 << 8) | val);
+  unsigned long resp = ot->sendRequest(req);
+
+  if (resp) {
+	ESP_LOGI("brink", "Successfully applied preset: %s (TSP 47 = %d)", preset.c_str(), val);
+  } else {
+	ESP_LOGE("brink", "Failed to apply preset: %s (TSP 47)", preset.c_str());
+  }
+
+  // Clear flag to resume async polling
+  write_in_progress_ = false;
 }
 
 inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
