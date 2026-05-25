@@ -876,7 +876,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
     ESP_LOGD("brink", "Waited %d ms for OT ready", wait_count * 50);
   }
 
-  uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
+  uint8_t tsp_base = (preset_num - 1) * 2;  // U1=0/1, U2=2/3, U3=4/5
   uint8_t low_byte = value & 0xFF;
   uint8_t high_byte = (value >> 8) & 0xFF;
 
