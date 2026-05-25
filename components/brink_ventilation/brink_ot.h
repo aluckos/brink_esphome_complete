@@ -820,15 +820,15 @@ inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
 	ESP_LOGD("brink", "apply_preset: Waited %d ms for OT ready", wait_count * 50);
   }
 
-  // Write to TSP 47 using synchronous sendRequest
+  // Write to TSP 72 using synchronous sendRequest (Ventilation Preset selector)
   unsigned long req = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
-									   (OpenThermMessageID)89, (47 << 8) | val);
+									   (OpenThermMessageID)89, (72 << 8) | val);
   unsigned long resp = ot->sendRequest(req);
 
   if (resp) {
-	ESP_LOGI("brink", "Successfully applied preset: %s (TSP 47 = %d)", preset.c_str(), val);
+	ESP_LOGI("brink", "Successfully applied preset: %s (TSP 72 = %d)", preset.c_str(), val);
   } else {
-	ESP_LOGE("brink", "Failed to apply preset: %s (TSP 47)", preset.c_str());
+	ESP_LOGE("brink", "Failed to apply preset: %s (TSP 72)", preset.c_str());
   }
 
   // Clear flag to resume async polling
