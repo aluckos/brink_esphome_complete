@@ -50,13 +50,7 @@ class BrinkU1Number : public number::Number, public Component {
     this->traits.set_step(10);
   }
   void control(float value) override;
-  void setup() override {
-    // Update range after parent reads min/max from device
-    if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
-      this->traits.set_min_value(parent_->min_vol_);
-      this->traits.set_max_value(parent_->max_vol_);
-    }
-  }
+  void setup() override;
 };
 
 // Number: U2 ventilation preset (TSP 40/41)
@@ -70,12 +64,7 @@ class BrinkU2Number : public number::Number, public Component {
     this->traits.set_step(10);
   }
   void control(float value) override;
-  void setup() override {
-    if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
-      this->traits.set_min_value(parent_->min_vol_);
-      this->traits.set_max_value(parent_->max_vol_);
-    }
-  }
+  void setup() override;
 };
 
 // Number: U3 ventilation preset (TSP 42/43)
@@ -89,12 +78,7 @@ class BrinkU3Number : public number::Number, public Component {
     this->traits.set_step(10);
   }
   void control(float value) override;
-  void setup() override {
-    if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
-      this->traits.set_min_value(parent_->min_vol_);
-      this->traits.set_max_value(parent_->max_vol_);
-    }
-  }
+  void setup() override;
 };
 
 // Select: Bypass control (Auto/Open/Closed)
@@ -853,6 +837,29 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   ot->sendRequestAync(req_high);
 
   ESP_LOGI("brink", "Writing U%d preset: %d m³/h (validated)", preset_num, value);
+}
+
+// Setup methods for U1/U2/U3 numbers (after BrinkOpenTherm is fully defined)
+inline void BrinkU1Number::setup() {
+  // Update range after parent reads min/max from device
+  if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
+    this->traits.set_min_value(parent_->min_vol_);
+    this->traits.set_max_value(parent_->max_vol_);
+  }
+}
+
+inline void BrinkU2Number::setup() {
+  if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
+    this->traits.set_min_value(parent_->min_vol_);
+    this->traits.set_max_value(parent_->max_vol_);
+  }
+}
+
+inline void BrinkU3Number::setup() {
+  if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
+    this->traits.set_min_value(parent_->min_vol_);
+    this->traits.set_max_value(parent_->max_vol_);
+  }
 }
 
 }  // namespace brink_ventilation
