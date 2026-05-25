@@ -801,9 +801,8 @@ inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
 inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   ESP_LOGI("brink", "write_u_preset called: U%d = %d m³/h", preset_num, value);
 
-  if (!ot || !ot->isReady()) {
-	ESP_LOGW("brink", "write_u_preset: OT not ready (ot=%p, isReady=%d)", 
-			 ot, ot ? ot->isReady() : 0);
+  if (!ot) {
+	ESP_LOGE("brink", "write_u_preset: OT is NULL!");
 	return;
   }
 
@@ -854,6 +853,25 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 
   ESP_LOGI("brink", "Validation passed for U%d = %d", preset_num, value);
 
+  // Wait for OT to be ready (retry up to 50 times with 20ms delay = 1 second total)
+  int retry_count = 0;
+  const int max_retries = 50;
+  const int retry_delay_ms = 20;
+
+  while (!ot->isReady() && retry_count < max_retries) {
+	delay(retry_delay_ms);
+	retry_count++;
+  }
+
+  if (!ot->isReady()) {
+	ESP_LOGE("brink", "write_u_preset: OT not ready after %d retries (timeout)", max_retries);
+	return;
+  }
+
+  if (retry_count > 0) {
+	ESP_LOGD("brink", "OT became ready after %d retries (%d ms)", retry_count, retry_count * retry_delay_ms);
+  }
+
   uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
 
   // Write low byte
@@ -865,6 +883,18 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 
   delay(100);  // Small delay between writes
 
+  // Wait again for OT to be ready for high byte
+  retry_count = 0;
+  while (!ot->isReady() && retry_count < max_retries) {
+	delay(retry_delay_ms);
+	retry_count++;
+  }
+
+  if (!ot->isReady()) {
+	ESP_LOGE("brink", "write_u_preset: OT not ready for HB after %d retries", max_retries);
+	return;
+  }
+
   // Write high byte
   unsigned long req_high = ot->buildRequest(OpenThermMessageType::WRITE_DATA,
 											(OpenThermMessageID)89,
@@ -872,7 +902,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   ot->sendRequestAync(req_high);
   ESP_LOGD("brink", "Sent TSP %d (HB) = 0x%02X", tsp_base + 1, (value >> 8) & 0xFF);
 
-  ESP_LOGI("brink", "Writing U%d preset: %d m³/h (validated)", preset_num, value);
+  ESP_LOGI("brink", "Successfully wrote U%d preset: %d m³/h", preset_num, value);
 }
 
 // Setup methods for U1/U2/U3 numbers (after BrinkOpenTherm is fully defined)
