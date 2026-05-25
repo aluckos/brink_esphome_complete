@@ -42,24 +42,59 @@ class BrinkNumber : public number::Number {
 class BrinkU1Number : public number::Number, public Component {
  public:
   BrinkOpenTherm *parent_{nullptr};
-  void set_parent(BrinkOpenTherm *parent) { parent_ = parent; }
+  void set_parent(BrinkOpenTherm *parent) { 
+    parent_ = parent;
+    // Set initial traits - will be updated after reading min/max
+    this->traits.set_min_value(0);
+    this->traits.set_max_value(400);
+    this->traits.set_step(10);
+  }
   void control(float value) override;
+  void setup() override {
+    // Update range after parent reads min/max from device
+    if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
+      this->traits.set_min_value(parent_->min_vol_);
+      this->traits.set_max_value(parent_->max_vol_);
+    }
+  }
 };
 
 // Number: U2 ventilation preset (TSP 40/41)
 class BrinkU2Number : public number::Number, public Component {
  public:
   BrinkOpenTherm *parent_{nullptr};
-  void set_parent(BrinkOpenTherm *parent) { parent_ = parent; }
+  void set_parent(BrinkOpenTherm *parent) { 
+    parent_ = parent;
+    this->traits.set_min_value(0);
+    this->traits.set_max_value(400);
+    this->traits.set_step(10);
+  }
   void control(float value) override;
+  void setup() override {
+    if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
+      this->traits.set_min_value(parent_->min_vol_);
+      this->traits.set_max_value(parent_->max_vol_);
+    }
+  }
 };
 
 // Number: U3 ventilation preset (TSP 42/43)
 class BrinkU3Number : public number::Number, public Component {
  public:
   BrinkOpenTherm *parent_{nullptr};
-  void set_parent(BrinkOpenTherm *parent) { parent_ = parent; }
+  void set_parent(BrinkOpenTherm *parent) { 
+    parent_ = parent;
+    this->traits.set_min_value(0);
+    this->traits.set_max_value(400);
+    this->traits.set_step(10);
+  }
   void control(float value) override;
+  void setup() override {
+    if (parent_ && parent_->min_vol_ > 0 && parent_->max_vol_ > 0) {
+      this->traits.set_min_value(parent_->min_vol_);
+      this->traits.set_max_value(parent_->max_vol_);
+    }
+  }
 };
 
 // Select: Bypass control (Auto/Open/Closed)
@@ -98,6 +133,13 @@ class BrinkOpenTherm : public PollingComponent {
 
   // status tracking
   std::string last_status_{""};
+
+  // Cached values for validation
+  uint16_t min_vol_{0};
+  uint16_t max_vol_{400};
+  uint16_t u1_value_{0};
+  uint16_t u2_value_{0};
+  uint16_t u3_value_{0};
 
   // Async state machine
   AsyncState async_state_{AsyncState::IDLE};
@@ -523,6 +565,7 @@ inline void BrinkOpenTherm::handle_response() {
 	case 8:  // MAX_VOL HB
 	  if (ot->isValidResponse(response) && max_vol_sensor) {
 		uint16_t max_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		max_vol_ = max_vol;  // Cache for validation
 		ESP_LOGI("brink", "MAX_VOL: %d m³/h", max_vol);
 		max_vol_sensor->publish_state(max_vol);
 	  }
@@ -538,6 +581,7 @@ inline void BrinkOpenTherm::handle_response() {
 	case 10:  // MIN_VOL HB
 	  if (ot->isValidResponse(response) && min_vol_sensor) {
 		uint16_t min_vol = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		min_vol_ = min_vol;  // Cache for validation
 		ESP_LOGI("brink", "MIN_VOL: %d m³/h", min_vol);
 		min_vol_sensor->publish_state(min_vol);
 	  }
@@ -594,6 +638,7 @@ inline void BrinkOpenTherm::handle_response() {
 	case 17:  // U1 HB
 	  if (ot->isValidResponse(response) && u1_sensor) {
 		uint16_t u1 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		u1_value_ = u1;  // Cache for validation
 		ESP_LOGI("brink", "U1: %d m³/h", u1);
 		u1_sensor->publish_state(u1);
 	  }
@@ -608,6 +653,7 @@ inline void BrinkOpenTherm::handle_response() {
 	case 19:  // U2 HB
 	  if (ot->isValidResponse(response) && u2_sensor) {
 		uint16_t u2 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		u2_value_ = u2;  // Cache for validation
 		ESP_LOGI("brink", "U2: %d m³/h", u2);
 		u2_sensor->publish_state(u2);
 	  }
@@ -622,6 +668,7 @@ inline void BrinkOpenTherm::handle_response() {
 	case 21:  // U3 HB
 	  if (ot->isValidResponse(response) && u3_sensor) {
 		uint16_t u3 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		u3_value_ = u3;  // Cache for validation
 		ESP_LOGI("brink", "U3: %d m³/h", u3);
 		u3_sensor->publish_state(u3);
 	  }
@@ -749,6 +796,46 @@ inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
 inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   if (!ot || !ot->isReady()) return;
 
+  // Validate: value must be within min_vol and max_vol range
+  if (value < min_vol_ || value > max_vol_) {
+	ESP_LOGE("brink", "U%d validation failed: %d not in range [%d, %d]", 
+			 preset_num, value, min_vol_, max_vol_);
+	return;
+  }
+
+  // Validate: U1 < U2 < U3
+  if (preset_num == 1) {
+	// U1 must be <= U2 and <= U3
+	if (u2_value_ > 0 && value > u2_value_) {
+	  ESP_LOGE("brink", "U1 validation failed: %d > U2 (%d)", value, u2_value_);
+	  return;
+	}
+	if (u3_value_ > 0 && value > u3_value_) {
+	  ESP_LOGE("brink", "U1 validation failed: %d > U3 (%d)", value, u3_value_);
+	  return;
+	}
+  } else if (preset_num == 2) {
+	// U2 must be >= U1 and <= U3
+	if (u1_value_ > 0 && value < u1_value_) {
+	  ESP_LOGE("brink", "U2 validation failed: %d < U1 (%d)", value, u1_value_);
+	  return;
+	}
+	if (u3_value_ > 0 && value > u3_value_) {
+	  ESP_LOGE("brink", "U2 validation failed: %d > U3 (%d)", value, u3_value_);
+	  return;
+	}
+  } else if (preset_num == 3) {
+	// U3 must be >= U1 and >= U2
+	if (u1_value_ > 0 && value < u1_value_) {
+	  ESP_LOGE("brink", "U3 validation failed: %d < U1 (%d)", value, u1_value_);
+	  return;
+	}
+	if (u2_value_ > 0 && value < u2_value_) {
+	  ESP_LOGE("brink", "U3 validation failed: %d < U2 (%d)", value, u2_value_);
+	  return;
+	}
+  }
+
   uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
 
   // Write low byte
@@ -765,7 +852,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 											((tsp_base + 1) << 8) | ((value >> 8) & 0xFF));
   ot->sendRequestAync(req_high);
 
-  ESP_LOGI("brink", "Writing U%d preset: %d m³/h", preset_num, value);
+  ESP_LOGI("brink", "Writing U%d preset: %d m³/h (validated)", preset_num, value);
 }
 
 }  // namespace brink_ventilation
