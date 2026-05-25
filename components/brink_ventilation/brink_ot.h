@@ -616,14 +616,17 @@ inline void BrinkOpenTherm::handle_response() {
 	case 16:  // U1 LB
 	  if (ot->isValidResponse(response)) {
 		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "U1 LB: 0x%02X", tsp_low_byte_);
 	  }
 	  break;
 
 	case 17:  // U1 HB
 	  if (ot->isValidResponse(response) && u1_sensor) {
-		uint16_t u1 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		uint8_t high_byte = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "U1 HB: 0x%02X", high_byte);
+		uint16_t u1 = ((uint16_t)high_byte << 8) | tsp_low_byte_;
 		u1_value_ = u1;  // Cache for validation
-		ESP_LOGI("brink", "U1: %d m³/h", u1);
+		ESP_LOGI("brink", "U1: %d m³/h (raw: HB=0x%02X, LB=0x%02X)", u1, high_byte, tsp_low_byte_);
 		u1_sensor->publish_state(u1);
 	  }
 	  break;
@@ -631,14 +634,17 @@ inline void BrinkOpenTherm::handle_response() {
 	case 18:  // U2 LB
 	  if (ot->isValidResponse(response)) {
 		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "U2 LB: 0x%02X", tsp_low_byte_);
 	  }
 	  break;
 
 	case 19:  // U2 HB
 	  if (ot->isValidResponse(response) && u2_sensor) {
-		uint16_t u2 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		uint8_t high_byte = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "U2 HB: 0x%02X", high_byte);
+		uint16_t u2 = ((uint16_t)high_byte << 8) | tsp_low_byte_;
 		u2_value_ = u2;  // Cache for validation
-		ESP_LOGI("brink", "U2: %d m³/h", u2);
+		ESP_LOGI("brink", "U2: %d m³/h (raw: HB=0x%02X, LB=0x%02X)", u2, high_byte, tsp_low_byte_);
 		u2_sensor->publish_state(u2);
 	  }
 	  break;
@@ -646,14 +652,17 @@ inline void BrinkOpenTherm::handle_response() {
 	case 20:  // U3 LB
 	  if (ot->isValidResponse(response)) {
 		tsp_low_byte_ = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "U3 LB: 0x%02X", tsp_low_byte_);
 	  }
 	  break;
 
 	case 21:  // U3 HB
 	  if (ot->isValidResponse(response) && u3_sensor) {
-		uint16_t u3 = ((uint16_t)(response & 0xFF) << 8) | tsp_low_byte_;
+		uint8_t high_byte = (uint8_t)(response & 0xFF);
+		ESP_LOGD("brink", "U3 HB: 0x%02X", high_byte);
+		uint16_t u3 = ((uint16_t)high_byte << 8) | tsp_low_byte_;
 		u3_value_ = u3;  // Cache for validation
-		ESP_LOGI("brink", "U3: %d m³/h", u3);
+		ESP_LOGI("brink", "U3: %d m³/h (raw: HB=0x%02X, LB=0x%02X)", u3, high_byte, tsp_low_byte_);
 		u3_sensor->publish_state(u3);
 	  }
 	  #ifndef BRINK_ENABLE_EXPERIMENTAL
