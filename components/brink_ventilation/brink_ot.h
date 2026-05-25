@@ -796,34 +796,39 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 	return;
   }
 
-  // Validate: U1 < U2 < U3
+  // Helper: check if cached value is valid (within min/max range)
+  auto is_valid_cached = [this](uint16_t cached) {
+	return cached >= min_vol_ && cached <= max_vol_;
+  };
+
+  // Validate: U1 <= U2 <= U3 (only check against valid cached values)
   if (preset_num == 1) {
 	// U1 must be <= U2 and <= U3
-	if (u2_value_ > 0 && value > u2_value_) {
+	if (is_valid_cached(u2_value_) && value > u2_value_) {
 	  ESP_LOGE("brink", "U1 validation failed: %d > U2 (%d)", value, u2_value_);
 	  return;
 	}
-	if (u3_value_ > 0 && value > u3_value_) {
+	if (is_valid_cached(u3_value_) && value > u3_value_) {
 	  ESP_LOGE("brink", "U1 validation failed: %d > U3 (%d)", value, u3_value_);
 	  return;
 	}
   } else if (preset_num == 2) {
 	// U2 must be >= U1 and <= U3
-	if (u1_value_ > 0 && value < u1_value_) {
+	if (is_valid_cached(u1_value_) && value < u1_value_) {
 	  ESP_LOGE("brink", "U2 validation failed: %d < U1 (%d)", value, u1_value_);
 	  return;
 	}
-	if (u3_value_ > 0 && value > u3_value_) {
+	if (is_valid_cached(u3_value_) && value > u3_value_) {
 	  ESP_LOGE("brink", "U2 validation failed: %d > U3 (%d)", value, u3_value_);
 	  return;
 	}
   } else if (preset_num == 3) {
 	// U3 must be >= U1 and >= U2
-	if (u1_value_ > 0 && value < u1_value_) {
+	if (is_valid_cached(u1_value_) && value < u1_value_) {
 	  ESP_LOGE("brink", "U3 validation failed: %d < U1 (%d)", value, u1_value_);
 	  return;
 	}
-	if (u2_value_ > 0 && value < u2_value_) {
+	if (is_valid_cached(u2_value_) && value < u2_value_) {
 	  ESP_LOGE("brink", "U3 validation failed: %d < U2 (%d)", value, u2_value_);
 	  return;
 	}
