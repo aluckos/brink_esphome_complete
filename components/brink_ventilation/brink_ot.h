@@ -264,11 +264,6 @@ inline void BrinkOpenTherm::loop() {
   // Non-blocking process - check OT state machine
   ot->process();
 
-  // Skip polling if write operation is in progress
-  if (write_in_progress_) {
-    return;
-  }
-
   // Check if we're waiting and response is ready
   if (async_state_ == AsyncState::WAITING && ot->isReady()) {
 	last_response_ = ot->getLastResponse();
@@ -277,8 +272,8 @@ inline void BrinkOpenTherm::loop() {
 	handle_response();
   }
 
-  // If idle and OT ready, try to send next request
-  if (async_state_ == AsyncState::IDLE && ot->isReady()) {
+  // If idle and OT ready, try to send next request (skip if write in progress)
+  if (!write_in_progress_ && async_state_ == AsyncState::IDLE && ot->isReady()) {
 	start_next_request();
   }
 }
@@ -866,6 +861,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
   int wait_count = 0;
   const int max_wait = 40;  // 40 * 50ms = 2 seconds
   while (!ot->isReady() && wait_count < max_wait) {
+    ot->process();  // Keep processing OT communication
     delay(50);
     wait_count++;
   }
