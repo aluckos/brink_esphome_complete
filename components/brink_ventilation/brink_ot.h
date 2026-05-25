@@ -372,34 +372,34 @@ inline void BrinkOpenTherm::start_next_request() {
 	  ESP_LOGD("brink", "Step %d: Reading TSP 63 (CURRENT_OUTPUT_VOL HB)", step_);
 	  break;
 
-	case 16:  // U1: TSP 38 LB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 38 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 38 (U1 LB)", step_);
+	case 16:  // U1: TSP 0 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 0 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 0 (U1 LB)", step_);
 	  break;
 
-	case 17:  // U1: TSP 39 HB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 39 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 39 (U1 HB)", step_);
+	case 17:  // U1: TSP 1 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 1 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 1 (U1 HB)", step_);
 	  break;
 
-	case 18:  // U2: TSP 40 LB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 40 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 40 (U2 LB)", step_);
+	case 18:  // U2: TSP 2 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 2 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 2 (U2 LB)", step_);
 	  break;
 
-	case 19:  // U2: TSP 41 HB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 41 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 41 (U2 HB)", step_);
+	case 19:  // U2: TSP 3 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 3 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 3 (U2 HB)", step_);
 	  break;
 
-	case 20:  // U3: TSP 42 LB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 42 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 42 (U3 LB)", step_);
+	case 20:  // U3: TSP 4 LB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 4 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 4 (U3 LB)", step_);
 	  break;
 
-	case 21:  // U3: TSP 43 HB
-	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 43 << 8);
-	  ESP_LOGD("brink", "Step %d: Reading TSP 43 (U3 HB)", step_);
+	case 21:  // U3: TSP 5 HB
+	  request = ot->buildRequest(OpenThermMessageType::READ_DATA, (OpenThermMessageID)89, 5 << 8);
+	  ESP_LOGD("brink", "Step %d: Reading TSP 5 (U3 HB)", step_);
 	  break;
 
 	// === EXPERIMENTAL - może nie działać ===
