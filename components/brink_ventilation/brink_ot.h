@@ -853,6 +853,23 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 
   ESP_LOGI("brink", "Validation passed for U%d = %d", preset_num, value);
 
+  // Wait for async state machine to be IDLE (max 10 seconds)
+  int wait_count = 0;
+  const int max_wait = 200;  // 200 * 50ms = 10 seconds
+  while (async_state_ != AsyncState::IDLE && wait_count < max_wait) {
+	delay(50);
+	wait_count++;
+  }
+
+  if (async_state_ != AsyncState::IDLE) {
+	ESP_LOGE("brink", "write_u_preset: Timeout waiting for IDLE state");
+	return;
+  }
+
+  if (wait_count > 0) {
+	ESP_LOGD("brink", "Waited %d ms for IDLE state", wait_count * 50);
+  }
+
   uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
   uint8_t low_byte = value & 0xFF;
   uint8_t high_byte = (value >> 8) & 0xFF;
