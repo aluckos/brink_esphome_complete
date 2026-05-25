@@ -724,23 +724,35 @@ inline void BrinkNumber::control(float value) {
 }
 
 inline void BrinkU1Number::control(float value) {
+  ESP_LOGI("brink", "U1Number::control called with value=%.0f", value);
   this->publish_state(value);
   if (this->parent_ != nullptr) {
+	ESP_LOGD("brink", "Calling write_u_preset(1, %d)", (uint16_t)value);
 	this->parent_->write_u_preset(1, (uint16_t)value);
+  } else {
+	ESP_LOGE("brink", "U1Number::control: parent is NULL!");
   }
 }
 
 inline void BrinkU2Number::control(float value) {
+  ESP_LOGI("brink", "U2Number::control called with value=%.0f", value);
   this->publish_state(value);
   if (this->parent_ != nullptr) {
+	ESP_LOGD("brink", "Calling write_u_preset(2, %d)", (uint16_t)value);
 	this->parent_->write_u_preset(2, (uint16_t)value);
+  } else {
+	ESP_LOGE("brink", "U2Number::control: parent is NULL!");
   }
 }
 
 inline void BrinkU3Number::control(float value) {
+  ESP_LOGI("brink", "U3Number::control called with value=%.0f", value);
   this->publish_state(value);
   if (this->parent_ != nullptr) {
+	ESP_LOGD("brink", "Calling write_u_preset(3, %d)", (uint16_t)value);
 	this->parent_->write_u_preset(3, (uint16_t)value);
+  } else {
+	ESP_LOGE("brink", "U3Number::control: parent is NULL!");
   }
 }
 
@@ -787,7 +799,13 @@ inline void BrinkOpenTherm::apply_preset(const std::string &preset) {
 }
 
 inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
-  if (!ot || !ot->isReady()) return;
+  ESP_LOGI("brink", "write_u_preset called: U%d = %d m³/h", preset_num, value);
+
+  if (!ot || !ot->isReady()) {
+	ESP_LOGW("brink", "write_u_preset: OT not ready (ot=%p, isReady=%d)", 
+			 ot, ot ? ot->isReady() : 0);
+	return;
+  }
 
   // Validate: value must be within min_vol and max_vol range
   if (value < min_vol_ || value > max_vol_) {
@@ -834,6 +852,8 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 	}
   }
 
+  ESP_LOGI("brink", "Validation passed for U%d = %d", preset_num, value);
+
   uint8_t tsp_base = 38 + (preset_num - 1) * 2;  // U1=38/39, U2=40/41, U3=42/43
 
   // Write low byte
@@ -841,6 +861,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 										   (OpenThermMessageID)89, 
 										   (tsp_base << 8) | (value & 0xFF));
   ot->sendRequestAync(req_low);
+  ESP_LOGD("brink", "Sent TSP %d (LB) = 0x%02X", tsp_base, value & 0xFF);
 
   delay(100);  // Small delay between writes
 
@@ -849,6 +870,7 @@ inline void BrinkOpenTherm::write_u_preset(uint8_t preset_num, uint16_t value) {
 											(OpenThermMessageID)89,
 											((tsp_base + 1) << 8) | ((value >> 8) & 0xFF));
   ot->sendRequestAync(req_high);
+  ESP_LOGD("brink", "Sent TSP %d (HB) = 0x%02X", tsp_base + 1, (value >> 8) & 0xFF);
 
   ESP_LOGI("brink", "Writing U%d preset: %d m³/h (validated)", preset_num, value);
 }
